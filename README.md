@@ -1,5 +1,68 @@
 # Smart Commuter Companion
 
+## Run the app
+
+The first mobile-first vertical slice is now implemented with Next.js, TypeScript, MapLibre and deterministic journey fixtures.
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`. The app starts in a clearly labelled EWL disruption replay. Use **Show normal** in the header to see the quiet normal-day state.
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
+The current slice includes Today, Compare and Journey views, a real OSM-based map, fixture provider boundaries, affected-leg detection, a deterministic route recommendation, active-journey persistence and a production service worker. Live OneMap and DataMall credentials are not required yet; copy `.env.example` to `.env.local` when those adapters are added.
+
+## Implementation tracker
+
+This checklist is the working delivery order. Update it as each slice is implemented and verified.
+
+- [x] **Base application**
+  - [x] Mobile-first Today, Compare and Journey screens.
+  - [x] Normal-day and labelled disruption replay states.
+  - [x] MapLibre/OSM route view with an offline schematic fallback.
+  - [x] PWA manifest, service worker and active-journey persistence.
+- [x] **1. Application API and journey orchestrator**
+  - [x] Implement `POST /api/journeys/plan`.
+  - [x] Implement `POST /api/journeys/:id/evaluate`.
+  - [x] Implement `GET /api/journeys/:id/compare`.
+  - [x] Move scenario evaluation and recommendation construction out of React components.
+  - [x] Keep deterministic fixture providers as the default backend.
+  - [x] Add application-layer tests and client-visible failure handling.
+- [x] **2. Complete the affected-leg engine**
+  - [x] Match event validity against each leg's expected travel window.
+  - [x] Add canonical LTA line and station-code mappings.
+  - [x] Split rail geometry so only the affected EWL portion is highlighted.
+  - [x] Test station matches, unrelated events, adjacent segments and expired events.
+- [x] **3. Replace hard-coded scores**
+  - [x] Calculate deadline risk, delay, walking, transfers, crowding and route churn.
+  - [x] Apply configurable Rachel-specific weights.
+  - [x] Return a human-readable score breakdown to the Compare screen.
+- [ ] **4. Provider integrations**
+  - [ ] Complete a OneMap spike for Tampines to Raffles Place.
+  - [ ] Add a schema-validated DataMall `TrainServiceAlerts` adapter.
+  - [ ] Add crowding and weather adapters.
+  - [ ] Store provenance, timestamps, validity and replay/live state consistently.
+- [ ] **5. Routine and morning-check flow**
+  - [ ] Add an editable saved routine.
+  - [ ] Implement `Run morning check`.
+  - [ ] Trigger advice only when deadline or disruption thresholds are crossed.
+  - [ ] Add alert fingerprinting and cooldown logic.
+- [ ] **6. Proper offline persistence**
+  - [ ] Move active-journey storage from `localStorage` to IndexedDB.
+  - [ ] Cache relevant conditions and their timestamps.
+  - [ ] Test offline opening, stale-data messaging and reconnection.
+- [ ] **7. Submission-grade testing**
+  - [ ] Add end-to-end normal, disruption, rain, offline and provider-failure tests.
+  - [ ] Check accessibility and layout at 320, 360 and 390 px.
+  - [ ] Test on iOS Safari and Android Chrome.
+
 > A proactive, mobile-first journey companion for Rachel, a fixed-schedule commuter travelling from Tampines to Raffles Place. It notices when today is different, recommends one clear action before she leaves, and shows exactly how her route changes.
 
 ## 1. Project status

@@ -1,0 +1,28 @@
+{
+  "name": "smart-commute",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "tsx --test \"lib/**/*.test.ts\""
+  },
+  "dependencies": {
+    "lucide-react": "latest",
+    "maplibre-gl": "latest",
+    "next": "16.3.5",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "16.3.5",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
