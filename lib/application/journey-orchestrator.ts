@@ -9,7 +9,7 @@ import type {
   PlanJourneyCommand,
   RecommendationView,
 } from "./journey-view-model";
-import { journeysIn } from "./journey-view-model";
+import { projectDemand } from "../demand-flow";
 
 export class JourneyNotFoundError extends Error {
   constructor(journeyId: string) {
@@ -75,7 +75,10 @@ export class JourneyOrchestrator {
   async plan(command: PlanJourneyCommand = {}): Promise<JourneyPlanView> {
     const fixtureScenario = this.getScenario(command.scenarioId ?? "ewl-disruption");
     const provider = this.routingProviderFactory(fixtureScenario);
-    const journeys = await provider.plan(command.routine ?? fixtureScenario.routine);
+    const rawJourneys = await provider.plan(command.routine ?? fixtureScenario.routine);
+    const projection = command.demand ? projectDemand(rawJourneys, fixtureScenario,
+      command.demand.profile, command.demand.selections) : undefined;
+    const journeys = projection?.journeys ?? rawJourneys;
     const usualJourney = journeys[0];
 
     if (!usualJourney) {
@@ -88,14 +91,21 @@ export class JourneyOrchestrator {
       usualJourney,
       recommendedJourney: journeys[1],
     };
-    const evaluation = this.evaluateScenario(scenario, usualJourney.id);
+    const evaluation = this.evaluateScenario(scenario, usualJourney.id, journeys.slice(1));
+    const selected = evaluation.alternatives.find((option) => option.recommended)?.journey;
+    scenario.recommendedJourney = selected?.id !== usualJourney.id ? selected : undefined;
+    if (selected?.id === "relief-tel-route") {
+      evaluation.recommendation.reason = "The direct DTL alternative is forecast to be crowded in this demo. Bus 31 and the Thomson-East Coast Line use a less-loaded corridor.";
+      evaluation.recommendation.changeExplanation = "Accepted demo reroutes shift demand towards the DTL. This separate bus-and-TEL route avoids both the EWL disruption and the projected DTL peak. Estimates are synthetic.";
+    }
 
-    return { scenario, ...evaluation };
+    return { scenario, ...evaluation, ...(projection ? { demand: projection.demand } : {}) };
   }
 
-  async evaluate(journeyId: string, scenarioId: Scenario["id"]): Promise<JourneyEvaluationView> {
-    const plan = await this.plan({ scenarioId });
-    const journey = this.findJourney(plan.scenario, journeyId);
+  async evaluate(journeyId: string, scenarioId: Scenario["id"], demand?: PlanJourneyCommand["demand"]): Promise<JourneyEvaluationView> {
+    const plan = await this.plan({ scenarioId, demand });
+    const journey = plan.alternatives.find((option) => option.journey.id === journeyId)?.journey;
+    if (!journey) throw new JourneyNotFoundError(journeyId);
     return {
       journeyId,
       scenarioId,
@@ -105,16 +115,16 @@ export class JourneyOrchestrator {
     };
   }
 
-  async compare(journeyId: string, scenarioId: Scenario["id"]): Promise<JourneyComparisonView> {
-    const plan = await this.plan({ scenarioId });
-    this.assertJourneyExists(plan.scenario, journeyId);
+  async compare(journeyId: string, scenarioId: Scenario["id"], demand?: PlanJourneyCommand["demand"]): Promise<JourneyComparisonView> {
+    const plan = await this.plan({ scenarioId, demand });
+    if (!plan.alternatives.some((option) => option.journey.id === journeyId)) throw new JourneyNotFoundError(journeyId);
     return { journeyId, scenarioId, alternatives: plan.alternatives };
   }
 
-  private evaluateScenario(scenario: Scenario, journeyId: string): JourneyEvaluationView {
+  private evaluateScenario(scenario: Scenario, journeyId: string, candidates?: Journey[]): JourneyEvaluationView {
     const alternatives = buildAlternatives(
       scenario.usualJourney,
-      scenario.recommendedJourney,
+      candidates ?? scenario.recommendedJourney,
       scenario.routine.arrivalDeadline,
       scenario.conditions,
     );
@@ -134,17 +144,6 @@ export class JourneyOrchestrator {
     throw new ScenarioNotFoundError(scenarioId);
   }
 
-  private assertJourneyExists(scenario: Scenario, journeyId: string) {
-    this.findJourney(scenario, journeyId);
-  }
-
-  private findJourney(scenario: Scenario, journeyId: string): Journey {
-    const journey = journeysIn(scenario).find((candidate) => candidate.id === journeyId);
-    if (!journey) {
-      throw new JourneyNotFoundError(journeyId);
-    }
-    return journey;
-  }
 }
 
 export const journeyOrchestrator = new JourneyOrchestrator();

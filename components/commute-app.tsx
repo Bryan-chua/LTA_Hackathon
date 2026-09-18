@@ -23,9 +23,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AffectedSegment, Alternative, CrowdingLevel, Journey, Scenario } from "@/lib/domain";
-import { requestJourneyPlan } from "@/lib/application/journey-api-client";
+import { requestJourneyPlan, requestParticipation } from "@/lib/application/journey-api-client";
 import type { JourneyPlanView } from "@/lib/application/journey-view-model";
 import { RouteMap } from "./route-map";
+import { DemandPanel } from "./demand-panel";
+import type { DemandProfile } from "@/lib/demand-flow";
 
 type Screen = "today" | "compare" | "journey";
 
@@ -51,7 +53,7 @@ function GovernmentBanner() {
   return (
     <div className="government-banner">
       <ShieldCheck size={13} aria-hidden="true" />
-      <span>A Singapore Government Agency Website</span>
+      <span>Hackathon concept · Unofficial commuter demo</span>
       <button aria-label="About this concept"><Info size={13} /></button>
     </div>
   );
@@ -114,7 +116,7 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
         <p>{disrupted ? "Your morning journey needs one change." : "Your usual journey is looking good."}</p>
       </section>
 
-      {scenario.isReplay && <div className="replay-label"><Radio size={14} />Replay scenario · Demo data</div>}
+      <div className="replay-label"><Radio size={14} />Replay scenario · Demo data</div>
 
       <article className={`recommendation-card ${!disrupted ? "recommendation-card--normal" : ""}`}>
         <div className="decision-label">
@@ -148,23 +150,31 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
         </section>
       )}
 
-      <button className="secondary-button" onClick={onCompare}>Compare both routes<GitCompareArrows size={18} /></button>
+      <button className="secondary-button" onClick={onCompare}>Compare routes<GitCompareArrows size={18} /></button>
     </main>
   );
 }
 
 const crowdingCopy: Record<CrowdingLevel, string> = { low: "Low", moderate: "Moderate", high: "High", unknown: "Unavailable" };
 
-function RouteOption({ option, affected, onUse }: { option: Alternative; affected: boolean; onUse: () => void }) {
+function RouteOption({ option, affected, onUse }: { option: Alternative; affected: boolean; onUse: (journey: Journey) => void }) {
   const { journey } = option;
   return (
     <article className={`route-option ${option.recommended ? "route-option--recommended" : "route-option--affected"}`}>
       <div className="option-heading">
-        <div className="option-label">{option.recommended ? <><Check size={14} />Recommended</> : affected ? <><AlertTriangle size={14} />Usual route · affected</> : "Usual route"}</div>
+        <div className="option-label">{option.recommended ? <><Check size={14} />Recommended</> : affected ? <><AlertTriangle size={14} />Usual route · affected</> : "Alternative"}</div>
         <div className="option-outcome"><span>Score {option.score}</span><strong>{journey.arrival.earliest}–{journey.arrival.latest}</strong></div>
       </div>
       <h2>{journey.name}</h2>
       <p>{option.explanation}</p>
+      {journey.demandForecast && (
+        <details className="demand-details">
+          <summary>Projected crowding: {crowdingCopy[journey.demandForecast.crowding]} · demo</summary>
+          <p>{journey.demandForecast.corridor}<br />Boarding window {new Date(journey.demandForecast.bucketStart).toLocaleTimeString("en-SG", { timeZone: "Asia/Singapore", hour12: false, hour: "2-digit", minute: "2-digit" })}–{new Date(journey.demandForecast.bucketEnd).toLocaleTimeString("en-SG", { timeZone: "Asia/Singapore", hour12: false, hour: "2-digit", minute: "2-digit" })} SGT</p>
+          <p>Illustrative volume: {journey.demandForecast.projectedPassengers} passengers. Baseline {journey.demandForecast.baseline} + other displaced commuters {journey.demandForecast.externalSpillover} + net accepted-route shift {journey.demandForecast.netAppShift}.</p>
+          <p>Assumed capacity: {journey.demandForecast.assumedCapacity} per window. Added boarding delay: {journey.demandForecast.addedDelayMinutes} min. Existing service-disruption crowd warnings still apply. All values are synthetic assumptions, not measured train occupancy.</p>
+        </details>
+      )}
       <div className="metric-grid">
         <div><Clock3 size={17} /><span>Depart<strong>{clockTime(journey.departureAt)}</strong></span></div>
         <div><Footprints size={17} /><span>Walking<strong>{journey.legs.filter((leg) => leg.mode === "walk").reduce((sum, leg) => sum + leg.durationMinutes, 0)} min</strong></span></div>
@@ -182,16 +192,16 @@ function RouteOption({ option, affected, onUse }: { option: Alternative; affecte
           ))}
         </ul>
       </details>
-      {option.recommended && <button className="primary-button" onClick={onUse}><Navigation size={18} />Use this route<ArrowRight size={18} /></button>}
+      <button className={option.recommended ? "primary-button" : "secondary-button"} onClick={() => onUse(journey)}><Navigation size={18} />Use this route<ArrowRight size={18} /></button>
     </article>
   );
 }
 
-function CompareScreen({ scenario, alternatives, onUse }: { scenario: Scenario; alternatives: Alternative[]; onUse: () => void }) {
+function CompareScreen({ scenario, alternatives, onUse }: { scenario: Scenario; alternatives: Alternative[]; onUse: (journey: Journey) => void }) {
   return (
     <main id="main-content" className="screen">
       <section className="page-intro"><span>ROUTE COMPARISON</span><h1>Choose your best way in</h1><p>Compared against your 8:45 arrival deadline.</p></section>
-      {alternatives.map((option) => <RouteOption key={option.id} option={option} affected={scenario.conditions.length > 0} onUse={onUse} />)}
+      {alternatives.map((option) => <RouteOption key={option.id} option={option} affected={scenario.conditions.length > 0 && option.journey.id === scenario.usualJourney.id} onUse={onUse} />)}
       <section className="comparison-note"><Info size={18} /><p><strong>How we compare</strong>Arrival reliability, walking, transfers and crowding are scored for Rachel&apos;s saved routine.</p></section>
     </main>
   );
@@ -204,20 +214,22 @@ function StepIcon({ mode }: { mode: Journey["legs"][number]["mode"] }) {
 }
 
 function JourneyScreen({ scenario, activeJourney, affectedSegments }: { scenario: Scenario; activeJourney: Journey; affectedSegments: AffectedSegment[] }) {
+  const firstLeg = activeJourney.legs[0];
+  const firstTransit = activeJourney.legs.find((leg) => leg.mode === "rail" || leg.mode === "bus");
   return (
     <main id="main-content" className="screen journey-screen">
       <section className="journey-status">
         <div><span>ARRIVE BY</span><strong>{activeJourney.arrival.p50}</strong><small>{activeJourney.arrival.earliest}–{activeJourney.arrival.latest}</small></div>
-        <div className="on-time-chip"><Check size={15} />On time</div>
+        <div className="on-time-chip"><Clock3 size={15} />{activeJourney.arrival.latest <= scenario.routine.arrivalDeadline ? "Within deadline" : "Arrival risk"}</div>
       </section>
       <section className="next-action">
-        <div className="next-action__eyebrow"><Navigation size={14} />NEXT UP · 7 MIN</div>
-        <h1>Walk to Tampines MRT</h1>
-        <p>Enter via Exit B, then follow signs for the {activeJourney.id.includes("dtl") ? "Downtown Line" : "East-West Line"}.</p>
+        <div className="next-action__eyebrow"><Navigation size={14} />NEXT UP · {firstLeg?.durationMinutes ?? 0} MIN</div>
+        <h1>{firstLeg?.instruction ?? "Begin your journey"}</h1>
+        <p>{firstTransit ? `Then continue on ${firstTransit.lineName ?? firstTransit.lineId ?? "the recommended service"}.` : "Follow the saved route steps."}</p>
         <div className="progress"><span style={{ width: "12%" }} /></div>
-        <small>About 56 minutes remaining</small>
+        <small>Demo journey · progress is illustrative</small>
       </section>
-      <RouteMap usual={scenario.usualJourney} recommended={scenario.recommendedJourney} affectedSegments={affectedSegments} />
+      <RouteMap usual={scenario.usualJourney} recommended={activeJourney.id !== scenario.usualJourney.id ? activeJourney : undefined} affectedSegments={affectedSegments} />
       <div className="offline-note"><CloudOff size={17} /><span><strong>Available offline</strong>Journey saved on this device · Updated {scenario.updatedAt}</span></div>
       <section className="timeline-section">
         <div className="section-heading"><div><span>YOUR JOURNEY</span><h2>{activeJourney.origin.shortName} to {activeJourney.destination.shortName}</h2></div></div>
@@ -244,6 +256,18 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
   const [online, setOnline] = useState(true);
   const [isScenarioLoading, setIsScenarioLoading] = useState(false);
   const [serviceError, setServiceError] = useState<string>();
+  const [participating, setParticipating] = useState(false);
+  const [demandMessage, setDemandMessage] = useState("");
+  const [demandBusy, setDemandBusy] = useState(false);
+  const [activeSnapshot, setActiveSnapshot] = useState<Journey>();
+
+  useEffect(() => {
+    if (!initialPlan.demand) return;
+    let cancelled = false;
+    requestParticipation("GET").then((value) => { if (!cancelled) setParticipating(value); })
+      .catch(() => { /* Sharing stays off if status cannot be checked. */ });
+    return () => { cancelled = true; };
+  }, [initialPlan.demand]);
 
   useEffect(() => {
     const restoreSavedJourney = () => {
@@ -269,16 +293,46 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [screen]);
 
   const activeJourney = useMemo(() => {
-    const candidates = [scenario.recommendedJourney, scenario.usualJourney];
+    if (activeSnapshot) return activeSnapshot;
+    const candidates = plan.alternatives.map((option) => option.journey);
     return candidates.find((journey) => journey?.id === activeJourneyId) ?? scenario.recommendedJourney ?? scenario.usualJourney;
-  }, [activeJourneyId, scenario]);
+  }, [activeJourneyId, activeSnapshot, scenario, plan.alternatives]);
 
-  const useRoute = () => {
-    const selected = plan.alternatives.find(({ journey }) => journey.id === plan.recommendation.journeyId)?.journey ?? scenario.usualJourney;
-    window.localStorage.setItem("smart-commute-active-journey", selected.id);
+  const selectRoute = (choice?: Journey) => {
+    if (demandBusy || isScenarioLoading) return;
+    const selected = choice ?? plan.alternatives.find(({ journey }) => journey.id === plan.recommendation.journeyId)?.journey ?? scenario.usualJourney;
+    try { window.localStorage.setItem("smart-commute-active-journey", selected.id); } catch { /* Route remains usable in memory. */ }
+    setActiveSnapshot(selected);
     setActiveJourneyId(selected.id);
-    setAnnouncement(`${selected.name} is now your active journey and is available offline.`);
+    setAnnouncement(`${selected.name} selected. Your active route will not change automatically.`);
     setScreen("journey");
+    if (participating && online && plan.demand && plan.demand.profile !== "unavailable") {
+      setDemandBusy(true);
+      requestParticipation("POST", { action: "accept", scenarioId: scenario.id,
+        profile: plan.demand.profile, journeyId: selected.id })
+        .then(() => setDemandMessage("Demo selection shared. Refresh to see its effect. Your selected journey stays unchanged."))
+        .catch((error) => setDemandMessage(`Route selected, but not shared: ${error.message}`))
+        .finally(() => setDemandBusy(false));
+    }
+  };
+
+  const refreshDemand = async (profile: DemandProfile) => {
+    setDemandBusy(true);
+    try {
+      setPlan(await requestJourneyPlan(scenario.id, profile));
+      setDemandMessage("Projection updated. Any active journey remains unchanged until you choose another route.");
+    } catch { setDemandMessage("Refresh failed. Showing the previous projection; it may be stale. Try again when connected."); }
+    finally { setDemandBusy(false); }
+  };
+
+  const updateParticipation = async (enabled: boolean) => {
+    setDemandBusy(true);
+    try {
+      const value = await requestParticipation(enabled ? "POST" : "DELETE", enabled ? { action: "consent", consent: true } : undefined);
+      setParticipating(value);
+      setDemandMessage(value ? "Sharing enabled for 30 minutes. Only future route selections are shared." : "Sharing off. Your server selection and cookie have been deleted.");
+    } catch (error) { setDemandMessage(error instanceof Error ? error.message : "Could not change participation. Try again."); }
+    finally { setDemandBusy(false); }
   };
 
   const toggleScenario = async () => {
@@ -286,9 +340,10 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     setIsScenarioLoading(true);
     setServiceError(undefined);
     try {
-      const nextPlan = await requestJourneyPlan(nextScenarioId);
+      const nextPlan = await requestJourneyPlan(nextScenarioId, plan.demand?.profile);
       setPlan(nextPlan);
       setActiveJourneyId(undefined);
+      setActiveSnapshot(undefined);
       setScreen("today");
       setAnnouncement(`${nextPlan.scenario.label} loaded.`);
     } catch (error) {
@@ -304,13 +359,16 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <GovernmentBanner />
-      <Header scenario={scenario} onToggle={toggleScenario} isLoading={isScenarioLoading} />
+      <Header scenario={scenario} onToggle={toggleScenario} isLoading={isScenarioLoading || demandBusy} />
       {!online && <div className="offline-banner" role="status"><CloudOff size={16} />Offline · showing your saved journey</div>}
       {serviceError && <div className="service-error" role="alert"><AlertTriangle size={16} />{serviceError}</div>}
       <div className="live-region" aria-live="polite">{announcement}</div>
-      {screen === "today" && <TodayScreen plan={plan} onCompare={() => setScreen("compare")} onUse={useRoute} />}
-      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} onUse={useRoute} />}
+      {screen === "today" && <TodayScreen plan={plan} onCompare={() => setScreen("compare")} onUse={() => selectRoute()} />}
+      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} onUse={selectRoute} />}
       {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} />}
+      {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
+        busy={demandBusy || isScenarioLoading} online={online} message={demandMessage}
+        onRefresh={refreshDemand} onParticipation={updateParticipation} />}
       <nav className="bottom-nav" aria-label="Primary navigation">
         {navItems.map(({ id, label, icon: Icon }) => (
           <button key={id} className={screen === id ? "active" : ""} onClick={() => setScreen(id)} aria-current={screen === id ? "page" : undefined}>

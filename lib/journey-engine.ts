@@ -145,7 +145,7 @@ export function isLegAffected(index: number, segments: AffectedSegment[]) {
 
 export function buildAlternatives(
   usual: Journey,
-  recommended: Journey | undefined,
+  recommended: Journey | Journey[] | undefined,
   deadline: string,
   conditions: TravelCondition[],
 ): Alternative[] {

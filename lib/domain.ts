@@ -1,3 +1,5 @@
+import type { DemandForecast } from "./demand-flow";
+
 export type Mode = "walk" | "rail" | "bus" | "cycle";
 export type CrowdingLevel = "low" | "moderate" | "high" | "unknown";
 
@@ -43,6 +45,7 @@ export interface JourneyLeg {
 }
 
 export interface Journey {
+  demandForecast?: DemandForecast;
   id: string;
   name: string;
   origin: Place;

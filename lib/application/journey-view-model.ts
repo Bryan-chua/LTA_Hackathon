@@ -1,4 +1,5 @@
 import type { AffectedSegment, Alternative, CrowdingLevel, Journey, Scenario } from "../domain";
+import type { DemandProfile, DemandView } from "../demand-flow";
 
 export interface RecommendationView {
   kind: "on_track" | "change";
@@ -23,6 +24,7 @@ export interface JourneyEvaluationView {
 
 export interface JourneyPlanView extends JourneyEvaluationView {
   scenario: Scenario;
+  demand?: DemandView;
 }
 
 export interface JourneyComparisonView {
@@ -34,6 +36,7 @@ export interface JourneyComparisonView {
 export interface PlanJourneyCommand {
   scenarioId?: Scenario["id"];
   routine?: Scenario["routine"];
+  demand?: { profile: DemandProfile; selections: readonly string[] };
 }
 
 export interface ApiSuccess<T> {

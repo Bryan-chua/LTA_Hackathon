@@ -21,6 +21,18 @@ The current slice includes Today, Compare and Journey views, a real OSM-based ma
 
 ## Implementation tracker
 
+### Demand-aware rerouting extension
+
+A synthetic demand replay now adjusts crowding and arrival estimates using accepted demo routes. The surge case moves 400 simulated commuters towards the direct DTL alternative, then recommends a distinct Bus 31 + Thomson-East Coast Line corridor. Compare exposes the arithmetic and assumptions.
+
+Optional participation is off until explicit opt-in. One latest demo route is stored per browser in server memory for a 30-minute session; retrying replaces the selection and withdrawal removes it. No GPS, SimplyGo account data or real travel histories are collected. This is a single-process demonstration, not a calibrated live passenger predictor.
+
+See [implementation, hackathon compatibility and Codex handoff](docs/DEMAND_AWARE_ROUTING.md) for the demo script, accounting model, API contract, privacy details, tests and live deployment backlog.
+
+The feature is on in development and off in production by default. To run the production-build demo, use `npm run build`, then `DEMAND_DEMO_ENABLED=true npm run start`. Keep it on a single Node process; serverless/multi-worker deployments do not share this in-memory store.
+
+### Original delivery tracker
+
 This checklist is the working delivery order. Update it as each slice is implemented and verified.
 
 - [x] **Base application**

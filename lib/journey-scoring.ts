@@ -226,13 +226,13 @@ function validateWeights(weights: JourneyScoreWeights) {
 
 export function scoreJourneyCandidates(
   usual: Journey,
-  candidate: Journey | undefined,
+  candidate: Journey | Journey[] | undefined,
   deadline: string,
   conditions: TravelCondition[],
   weights: JourneyScoreWeights = RACHEL_SCORE_WEIGHTS,
 ): Alternative[] {
   validateWeights(weights);
-  const journeys = [usual, candidate].filter((journey): journey is Journey => Boolean(journey));
+  const journeys = [usual, ...(Array.isArray(candidate) ? candidate : candidate ? [candidate] : [])];
   const bestArrivalMinutes = Math.min(...journeys.map((journey) => minutesSinceMidnight(journey.arrival.p50)));
   const context: ScoreContext = {
     deadline,
@@ -245,11 +245,12 @@ export function scoreJourneyCandidates(
     const { breakdown, metrics } = scoreJourney(journey, context, weights);
     return { journey, breakdown, metrics };
   });
-  const bestScore = Math.min(...scored.map(({ breakdown }) => breakdown.total));
+  // Exactly one recommendation, even after rounded-score ties.
+  const best = [...scored].sort((left, right) => left.breakdown.total - right.breakdown.total)[0];
 
   return scored
     .map(({ journey, breakdown, metrics }): Alternative => {
-      const recommended = breakdown.total === bestScore;
+      const recommended = journey.id === best.journey.id;
       const changed = journey.id !== usual.id;
       return {
         id: `${journey.id}-option`,
@@ -257,7 +258,9 @@ export function scoreJourneyCandidates(
         recommended,
         score: breakdown.total,
         scoreBreakdown: breakdown,
-        explanation: recommended
+        explanation: journey.demandForecast && journey.demandForecast.addedDelayMinutes > 0
+          ? "Projected boarding demand adds waiting time. The arrival range includes this synthetic delay estimate."
+          : recommended
           ? changed
             ? "Avoids the affected EWL section and protects your 8:45 deadline."
             : "Your usual route remains the simplest reliable option."
