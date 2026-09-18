@@ -37,7 +37,7 @@ const walkingMinutes = (journey: Journey) =>
     .filter((leg) => leg.mode === "walk")
     .reduce((total, leg) => total + leg.durationMinutes, 0);
 
-function buildRecommendation(
+export function buildRecommendation(
   scenario: Scenario,
   alternatives: Alternative[],
 ): RecommendationView {
@@ -45,6 +45,9 @@ function buildRecommendation(
   const journey = selected.journey;
   const primaryRailLeg = journey.legs.find((leg) => leg.mode === "rail");
   const changed = journey.id !== scenario.usualJourney.id;
+  const affectedLine = scenario.conditions.find((condition) => condition.kind === "train_disruption")?.lineIds?.[0] ?? "affected route";
+  const baselineWalking = walkingMinutes(scenario.usualJourney);
+  const walkingDelta = Math.max(0, walkingMinutes(journey) - baselineWalking);
 
   return {
     kind: changed ? "change" : "on_track",
@@ -53,15 +56,15 @@ function buildRecommendation(
       ? `Leave by ${displayTime(journey.departureAt)} and take the ${primaryRailLeg?.lineName ?? "recommended route"}`
       : `Leave around ${displayTime(journey.departureAt)} as usual`,
     reason: changed
-      ? `This avoids the affected EWL section and gives you a safer arrival before your ${displayTime(scenario.routine.arrivalDeadline)} deadline.`
-      : "No material disruptions are affecting your commute to Raffles Place.",
+      ? `This avoids the affected ${affectedLine} section and gives you a safer arrival before your ${displayTime(scenario.routine.arrivalDeadline)} deadline.`
+      : `No material disruptions are affecting your commute to ${scenario.routine.destination.shortName}.`,
     journeyId: journey.id,
     lineId: primaryRailLeg?.lineId ?? "Route",
-    lineDetail: changed ? "Avoids EWL delay" : "Direct rail journey",
+    lineDetail: changed ? `Avoids ${affectedLine} delay` : "Direct rail journey",
     walkingMinutes: walkingMinutes(journey),
     crowding: selected.crowding,
     changeExplanation: changed
-      ? "Your usual EWL route may arrive 6–20 minutes after your deadline. The DTL option adds 4 minutes of walking but avoids the disruption."
+      ? `Your usual route is exposed to the ${affectedLine} disruption. This option adds ${walkingDelta} minutes of walking and improves deadline reliability.`
       : undefined,
   };
 }

@@ -43,6 +43,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #76a4ff; outline-offs
 .advisory > div { flex: 1; }.advisory strong, .advisory span { display: block; }.advisory strong { font-size: 13px; }.advisory span { margin-top: 2px; font-size: 11px; }
 .offline-banner { padding: 9px 16px; display: flex; gap: 8px; justify-content: center; align-items: center; background: #dff2ef; color: #075a5f; font-size: 12px; font-weight: 700; }
 .service-error { padding: 9px 16px; display: flex; gap: 8px; justify-content: center; align-items: center; background: #fbe8ea; color: #8e1d28; font-size: 12px; font-weight: 700; }
+.decision-banner { padding: 10px 16px; display: flex; gap: 8px; justify-content: center; align-items: center; background: #e8f1ff; color: #163f78; font-size: 12px; font-weight: 700; }
 .live-region { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .screen { padding: 0 16px 24px; animation: enter .2s ease-out; }
 @keyframes enter { from { opacity: .4; transform: translateY(3px); } }
@@ -103,4 +104,33 @@ select:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+.live-label { color: var(--color-green); }
+.provider-warning { margin: 0 0 12px; padding: 10px 12px; display: flex; gap: 8px; align-items: center; border: 1px solid #e6c47b; border-radius: 9px; background: #fff7dc; color: #704b00; font-size: 12px; }
+.routine-panel { margin: 0 16px 24px; padding: 18px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: white; }
+.routine-panel summary { min-height: 44px; padding: 12px 0; cursor: pointer; color: var(--color-blue); font-weight: 700; }
+.routine-panel label, .routine-panel legend { color: var(--color-text); font-size: 12px; font-weight: 700; }
+.routine-panel input { width: 100%; min-height: 44px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: 8px; background: white; }
+.routine-search { margin: 10px 0 14px; }
+.routine-search > div { margin-top: 6px; display: grid; grid-template-columns: 1fr auto; gap: 7px; }
+.routine-search > div button { min-width: 86px; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--color-blue); border-radius: 8px; background: white; color: var(--color-blue); font-weight: 700; }
+.routine-search small { margin-top: 6px; display: flex; gap: 5px; color: var(--color-text-muted); font-size: 10px; }
+.geocode-results { display: grid; gap: 6px; margin-bottom: 14px; }
+.geocode-results button { padding: 10px; text-align: left; border: 1px solid var(--color-border); border-radius: 8px; background: #f8fafb; }
+.geocode-results strong, .geocode-results span { display: block; }
+.geocode-results strong { font-size: 12px; }.geocode-results span { margin-top: 3px; color: var(--color-text-muted); font-size: 10px; }
+.routine-time-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.routine-time-grid input { margin-top: 6px; }
+.routine-panel fieldset { margin: 14px 0; padding: 0; border: 0; }
+.weekday-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 7px; }
+.weekday-grid label { min-height: 42px; display: grid; place-items: center; border: 1px solid var(--color-border); border-radius: 7px; }
+.weekday-grid input { position: absolute; opacity: 0; width: 1px; min-height: 1px; }
+.weekday-grid label:has(input:checked) { border-color: var(--color-blue); background: var(--color-blue-soft); color: var(--color-blue); }
+.text-button { width: 100%; min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--color-blue); font-weight: 700; }
+.routine-panel .primary-button { margin-top: 14px; }
+.routine-privacy, .routine-panel > p[role="status"] { color: var(--color-text-muted); font-size: 11px; line-height: 1.5; }
+.routine-panel button:disabled { opacity: .55; cursor: not-allowed; }
+
+@media (min-width: 700px) {
+  .routine-panel { margin-left: 28px; margin-right: 28px; }
 }

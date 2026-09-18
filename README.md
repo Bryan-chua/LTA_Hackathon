@@ -56,16 +56,16 @@ This checklist is the working delivery order. Update it as each slice is impleme
   - [x] Calculate deadline risk, delay, walking, transfers, crowding and route churn.
   - [x] Apply configurable Rachel-specific weights.
   - [x] Return a human-readable score breakdown to the Compare screen.
-- [ ] **4. Provider integrations**
-  - [ ] Complete a OneMap spike for Tampines to Raffles Place.
-  - [ ] Add a schema-validated DataMall `TrainServiceAlerts` adapter.
-  - [ ] Add crowding and weather adapters.
-  - [ ] Store provenance, timestamps, validity and replay/live state consistently.
-- [ ] **5. Routine and morning-check flow**
-  - [ ] Add an editable saved routine.
-  - [ ] Implement `Run morning check`.
-  - [ ] Trigger advice only when deadline or disruption thresholds are crossed.
-  - [ ] Add alert fingerprinting and cooldown logic.
+- [x] **4. Provider integrations** — implemented; live credential verification remains deployment work.
+  - [x] Add authenticated OneMap geocoding and public-transport routing.
+  - [x] Add a schema-validated DataMall `TrainServiceAlerts` adapter.
+  - [x] Add separate forecast/real-time crowding and weather adapters.
+  - [x] Store provenance, timestamps, validity and replay/live state consistently.
+- [x] **5. Routine and morning-check flow** — implemented; database migration and real-device push verification remain deployment work.
+  - [x] Add an editable IndexedDB-owned routine.
+  - [x] Implement `Run live morning check`.
+  - [x] Trigger advice only when deadline or disruption thresholds are crossed.
+  - [x] Add PostgreSQL fingerprinting, cooldown records, Vercel scheduling and Web Push.
 - [ ] **6. Proper offline persistence**
   - [ ] Move active-journey storage from `localStorage` to IndexedDB.
   - [ ] Cache relevant conditions and their timestamps.
@@ -787,17 +787,22 @@ The first slice is complete when a developer can run one command, open the app o
 ```bash
 # Server-side only
 LTA_DATAMALL_ACCOUNT_KEY=
-ONEMAP_EMAIL=
-ONEMAP_PASSWORD=
-ROUTING_PROVIDER=fixture
+ONEMAP_ACCESS_TOKEN=
+DATA_MODE=replay
+LIVE_PROVIDERS_ENABLED=false
 DATABASE_URL=
+CRON_SECRET=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:team@example.com
+PUSH_ENABLED=false
 
 # Safe public configuration
 NEXT_PUBLIC_MAP_STYLE_URL=
 NEXT_PUBLIC_APP_ENV=development
 ```
 
-Never place secret values in `NEXT_PUBLIC_*` variables.
+Never place secret values in `NEXT_PUBLIC_*` variables. Replace `ONEMAP_ACCESS_TOKEN` when the current OneMap token expires.
 
 ## 24. Source material used
 

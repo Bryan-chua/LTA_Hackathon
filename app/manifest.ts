@@ -4,6 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Smart Commute",
     short_name: "Commute",
+    id: "/",
     description: "Decision-first journey guidance for Singapore commuters.",
     start_url: "/",
     display: "standalone",

@@ -27,3 +27,34 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),
   );
 });
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data?.json() || {}; } catch { payload = {}; }
+  const title = payload.title || "Smart Commute";
+  event.waitUntil(self.registration.showNotification(title, {
+    body: payload.body || "Open Smart Commute for your latest journey advice.",
+    icon: "/icon.svg",
+    badge: "/icon-maskable.svg",
+    tag: payload.decisionId ? `commute-${payload.decisionId}` : "smart-commute",
+    renotify: false,
+    data: { url: payload.url || "/" },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+    const existing = windows.find((client) => client.url.startsWith(self.location.origin));
+    if (existing) {
+      existing.navigate(target);
+      return existing.focus();
+    }
+    return self.clients.openWindow(target);
+  }));
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true })
+    .then((windows) => windows.forEach((client) => client.postMessage({ type: "push-subscription-changed" }))));
+});

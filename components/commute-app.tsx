@@ -28,6 +28,7 @@ import type { JourneyPlanView } from "@/lib/application/journey-view-model";
 import { RouteMap } from "./route-map";
 import { DemandPanel } from "./demand-panel";
 import type { DemandProfile } from "@/lib/demand-flow";
+import { RoutinePanel } from "./routine-panel";
 
 type Screen = "today" | "compare" | "journey";
 
@@ -116,7 +117,11 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
         <p>{disrupted ? "Your morning journey needs one change." : "Your usual journey is looking good."}</p>
       </section>
 
-      <div className="replay-label"><Radio size={14} />Replay scenario · Demo data</div>
+      <div className={`replay-label ${plan.dataMode === "live" ? "live-label" : ""}`}>
+        <Radio size={14} />{plan.dataMode === "live" ? `Live sources · Updated ${scenario.updatedAt}` : "Replay scenario · Demo data"}
+      </div>
+      {plan.providers?.some((provider) => provider.status !== "available") &&
+        <div className="provider-warning"><AlertTriangle size={15} />Some live sources are unavailable. Unknown data is not treated as normal.</div>}
 
       <article className={`recommendation-card ${!disrupted ? "recommendation-card--normal" : ""}`}>
         <div className="decision-label">
@@ -258,6 +263,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
   const [serviceError, setServiceError] = useState<string>();
   const [participating, setParticipating] = useState(false);
   const [demandMessage, setDemandMessage] = useState("");
+  const [decisionMessage, setDecisionMessage] = useState<string>();
   const [demandBusy, setDemandBusy] = useState(false);
   const [activeSnapshot, setActiveSnapshot] = useState<Journey>();
 
@@ -268,6 +274,28 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
       .catch(() => { /* Sharing stays off if status cannot be checked. */ });
     return () => { cancelled = true; };
   }, [initialPlan.demand]);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("decision");
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id)) return;
+    let cancelled = false;
+    fetch(`/api/notifications/${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error?.message ?? "Notification decision is unavailable.");
+        return payload.data as { title?: string; body?: string };
+      })
+      .then((decision) => {
+        if (cancelled) return;
+        const message = [decision.title, decision.body].filter(Boolean).join(" — ");
+        setDecisionMessage(message);
+        setAnnouncement(message);
+      })
+      .catch((error) => {
+        if (!cancelled) setServiceError(error instanceof Error ? error.message : "Notification decision is unavailable.");
+      });
+    return () => { cancelled = true; };
+  }, []);
+
 
   useEffect(() => {
     const restoreSavedJourney = () => {
@@ -362,6 +390,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
       <Header scenario={scenario} onToggle={toggleScenario} isLoading={isScenarioLoading || demandBusy} />
       {!online && <div className="offline-banner" role="status"><CloudOff size={16} />Offline · showing your saved journey</div>}
       {serviceError && <div className="service-error" role="alert"><AlertTriangle size={16} />{serviceError}</div>}
+      {decisionMessage && <div className="decision-banner" role="status"><Radio size={16} />{decisionMessage}</div>}
       <div className="live-region" aria-live="polite">{announcement}</div>
       {screen === "today" && <TodayScreen plan={plan} onCompare={() => setScreen("compare")} onUse={() => selectRoute()} />}
       {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} onUse={selectRoute} />}
@@ -369,6 +398,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
       {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
         busy={demandBusy || isScenarioLoading} online={online} message={demandMessage}
         onRefresh={refreshDemand} onParticipation={updateParticipation} />}
+      {screen === "today" && <RoutinePanel onPlan={(nextPlan) => { setPlan(nextPlan); setActiveJourneyId(undefined); setAnnouncement("Live morning check complete."); }} />}
       <nav className="bottom-nav" aria-label="Primary navigation">
         {navItems.map(({ id, label, icon: Icon }) => (
           <button key={id} className={screen === id ? "active" : ""} onClick={() => setScreen(id)} aria-current={screen === id ? "page" : undefined}>

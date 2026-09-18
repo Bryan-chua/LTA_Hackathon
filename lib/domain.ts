@@ -2,6 +2,18 @@ import type { DemandForecast } from "./demand-flow";
 
 export type Mode = "walk" | "rail" | "bus" | "cycle";
 export type CrowdingLevel = "low" | "moderate" | "high" | "unknown";
+export type DataMode = "live" | "replay";
+export type ProviderMode = "live" | "forecast" | "replay" | "cached";
+
+export interface ProviderMetadata {
+  source: string;
+  mode: ProviderMode;
+  fetchedAt: string;
+  validFrom?: string;
+  validTo?: string;
+  staleAt?: string;
+  warnings: string[];
+}
 
 export interface Coordinate {
   lng: number;
@@ -55,6 +67,7 @@ export interface Journey {
   legs: JourneyLeg[];
   source: "onemap" | "graphhopper" | "valhalla" | "fixture";
   generatedAt: string;
+  provider?: ProviderMetadata;
 }
 
 export interface TravelCondition {
@@ -69,6 +82,7 @@ export interface TravelCondition {
   source: string;
   observedAt: string;
   isReplay: boolean;
+  provider?: ProviderMetadata;
 }
 
 export interface Routine {
@@ -80,6 +94,8 @@ export interface Routine {
   arrivalDeadline: string;
   weekdays: number[];
   enabled: boolean;
+  timezone?: "Asia/Singapore";
+  materialDelayMinutes?: number;
 }
 
 export type ScoreComponentKey =

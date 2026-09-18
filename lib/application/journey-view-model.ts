@@ -1,4 +1,4 @@
-import type { AffectedSegment, Alternative, CrowdingLevel, Journey, Scenario } from "../domain";
+import type { AffectedSegment, Alternative, CrowdingLevel, DataMode, Journey, ProviderMode, Scenario } from "../domain";
 import type { DemandProfile, DemandView } from "../demand-flow";
 
 export interface RecommendationView {
@@ -22,9 +22,20 @@ export interface JourneyEvaluationView {
   recommendation: RecommendationView;
 }
 
+export interface ProviderStateView {
+  name: string;
+  status: "available" | "degraded" | "unavailable";
+  mode: ProviderMode;
+  fetchedAt: string;
+  staleAt?: string;
+  warnings: string[];
+}
+
 export interface JourneyPlanView extends JourneyEvaluationView {
   scenario: Scenario;
   demand?: DemandView;
+  dataMode?: DataMode;
+  providers?: ProviderStateView[];
 }
 
 export interface JourneyComparisonView {
