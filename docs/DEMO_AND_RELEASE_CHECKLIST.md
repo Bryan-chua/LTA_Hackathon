@@ -14,10 +14,10 @@ If a provider is unavailable, keep the replay fallback visibly labelled and stat
 
 ## Release checklist
 
-- [ ] Vercel production environment uses `DATA_MODE=live` and `LIVE_PROVIDERS_ENABLED=true`.
+- [ ] Google Cloud Run environment uses `DATA_MODE=live` and `LIVE_PROVIDERS_ENABLED=true`.
 - [ ] Supabase transaction-pooler `DATABASE_URL` and migration connection are configured.
-- [ ] Migrations and Supabase Cron configuration complete without printing secrets.
-- [ ] VAPID and Cron secrets are present; test push succeeds on Android and installed iOS.
+- [ ] Migrations and Google Cloud Scheduler OIDC configuration complete without printing secrets.
+- [ ] VAPID keys are present; test push succeeds on Android and installed iOS.
 - [ ] Unit, contract, lint, build, browser, axe, and manual device gates pass.
 - [ ] Lighthouse evidence is captured from the deployed production URL.
 - [ ] Provider attribution and current usage terms are reviewed.
@@ -33,3 +33,9 @@ If a provider is unavailable, keep the replay fallback visibly labelled and stat
 - Planned work is a labelled fixture for reproducible judging.
 - Arrival uncertainty is rule-based, not calibrated against historical outcomes.
 - Demand-aware routing is a synthetic demo, not live passenger measurement.
+
+## Reliability forecast demo gate
+
+Replay routes show numeric **Personalised Journey Reliability Forecast** output with a small **Synthetic model output** label. Do not describe it as measured accuracy. The judged live path continues to show **“Cautious rule-based estimate - not calibrated”** until a versioned model passes chronological calibration and P50/P90 coverage gates.
+
+Show one replay candidate's on-time probability, P50/P90, up to three source-backed reasons, confidence/freshness and subtle synthetic label. Then run a live/stale case to demonstrate fallback. Synthetic replay output cannot be cited as measured performance.

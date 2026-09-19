@@ -6,6 +6,13 @@ import { isDemandProfile } from "@/lib/demand-flow";
 import { noStore } from "@/lib/application/demand-http";
 import { routineSchema } from "@/lib/routine-schema";
 import { planLiveJourney } from "@/lib/live/live-planner";
+import { forecastCookie, recordForecastObservations } from "@/lib/server/reliability-store";
+
+async function attachObservationIds(request: Request, plan: JourneyPlanView) {
+  const publicId = forecastCookie(request);
+  if (!publicId) return;
+  await recordForecastObservations(publicId, plan).catch(() => undefined);
+}
 
 export async function POST(request: Request) {
   try {
@@ -20,6 +27,7 @@ export async function POST(request: Request) {
       const routine = routineSchema.safeParse(liveBody.routine);
       if (!routine.success) return invalidRequest(routine.error.issues[0]?.message ?? "Invalid routine.");
       const data = await planLiveJourney(routine.data, new Date(), travelMode);
+      await attachObservationIds(request, data);
       const response: ApiSuccess<JourneyPlanView> = { data };
       return Response.json(response, { headers: noStore });
     }
@@ -34,6 +42,7 @@ export async function POST(request: Request) {
     const profile = body.demandProfile;
     const data = await journeyOrchestrator.plan({ scenarioId, travelMode,
       demand: profile ? { profile, selections: demandStore.selections(scenarioId, profile) } : undefined });
+    await attachObservationIds(request, data);
     const response: ApiSuccess<JourneyPlanView> = { data };
     return Response.json(response, { headers: noStore });
   } catch (error) {

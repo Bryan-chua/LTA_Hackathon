@@ -3,8 +3,7 @@ import { buildAlternatives, findAffectedSegments } from "../journey-engine";
 import { buildRecommendation, scoreWeightsFor } from "../application/journey-orchestrator";
 import type { JourneyPlanView, ProviderStateView } from "../application/journey-view-model";
 import { OneMapRoutingProvider } from "./onemap";
-import { GoogleRoutesRoutingProvider } from "./google-routes";
-import { ProviderError } from "../provider-contracts";
+import { GoogleRoutesProvider } from "./google-routes";
 import { crowdingForLine, trainServiceConditions } from "./datamall";
 import { enrichBusLegs } from "./bus-enrichment";
 import { weatherConditions } from "./weather";
@@ -55,12 +54,11 @@ async function enrichCrowding(journeys: Journey[], now: Date): Promise<{ journey
 }
 
 export async function planLiveJourney(routine: Routine, now = new Date(), travelMode?: TravelMode): Promise<JourneyPlanView> {
-  const routingProvider = process.env.ROUTING_PROVIDER?.trim().toLowerCase() ?? "onemap";
-  if (routingProvider !== "onemap" && routingProvider !== "google") {
-    throw new ProviderError("Routing", "configuration", "ROUTING_PROVIDER must be 'onemap' or 'google'.");
-  }
-  const routing = routingProvider === "google" ? new GoogleRoutesRoutingProvider() : new OneMapRoutingProvider();
-  const journeys = await routing.plan(routine);
+  const useGoogle = process.env.ROUTING_PROVIDER === "google"
+    || (!process.env.ONEMAP_ACCESS_TOKEN?.trim() && Boolean(process.env.GOOGLE_MAPS_API_KEY?.trim()));
+  const journeys = useGoogle
+    ? await new GoogleRoutesProvider().plan(routine, now)
+    : await new OneMapRoutingProvider().plan(routine);
   const [alerts, weather] = await Promise.allSettled([trainServiceConditions(now), weatherConditions(journeys, now)]);
   const conditions: TravelCondition[] = [];
   const providers: ProviderStateView[] = [providerView(journeys[0].provider!)];

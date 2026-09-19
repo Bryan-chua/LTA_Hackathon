@@ -4,6 +4,7 @@ import type { Routine } from "../domain";
 import { planLiveJourney } from "../live/live-planner";
 import { decideMorningCheck, nextCheckAt } from "../morning-check";
 import { database } from "./database";
+import { pruneForecastData } from "./reliability-store";
 
 interface ClaimedProfile {
   installation_id: number;
@@ -141,5 +142,6 @@ export async function runMorningChecks() {
   }
   await database()`delete from notification_installations where last_seen_at < now() - interval '30 days'`;
   await database()`delete from notification_decisions where expires_at < now()`;
+  await pruneForecastData();
   return totals;
 }

@@ -36,6 +36,12 @@ For the three currently shipped scenarios, the map shows the original route, the
 - **Offline-safe by construction.** The service worker (`public/sw.js`) explicitly never caches `/api/*` responses — forecasts and personal data are excluded from the offline cache by design, not by oversight.
 - **A small, honestly-labelled step toward demand awareness** (§5) — most hackathon disruption tools stop at "here is an alternative"; this one also models, in a limited synthetic form, what happens if many commuters are sent to the same alternative at once.
 
+### Personalised Journey Reliability Forecast
+
+Every route candidate now has a deadline-focused reliability result: probability of arriving before Rachel's deadline, P50/P90 arrival (or a likely-arrival range), the strongest disruption/crowding/weather reasons, and confidence/freshness. Replay uses a small synthetic gradient-boosted decision-stump ensemble and carries a non-glaring **Synthetic model output** label.
+
+This is not a calibrated live-accuracy claim. Live routes use the deterministic scorer because no real labelled model has passed promotion gates. Separate opt-in feedback can collect pseudonymous point-in-time features and confirmed outcomes for 90 days; opt-out deletes them. No LLM is used. The design and remaining real-data rollout are in [`docs/PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md`](docs/PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md).
+
 ## 4. Collective rerouting approach, privacy safeguards, assumptions, and limitations
 
 **What "collective rerouting" means here, precisely.** When a demo user opts in and accepts an alternative route in a running scenario, that acceptance is recorded and fed into `lib/demand-flow.ts`, which arithmetically shifts a synthetic passenger count from a hardcoded EWL baseline onto the DTL/relief-bus corridor. The next scoring pass sees a nudged crowding estimate on that corridor. This is real, running code — not just a design document — and it does change what the app recommends next.
@@ -88,6 +94,11 @@ Implementation status is intentionally granular rather than a single "done" clai
 | Accessible travel-mode toggle | Implemented as a minimal interactive scoring reweighting (transfers, walking) plus explicit `Accessibility: Unverified` labelling on bus legs; it is not step-free routing and has no verified lift evidence yet |
 | Facilities Maintenance / lift-outage data | **Planned accessibility upgrade** — add LTA DataMall `v2/FacilitiesMaintenance`, preserving station/lift identifiers, source, freshness, and warnings. Failed, stale, or unmatched results will be `unverified`, never `available`. |
 | Covered walking / station-exit evidence | **Planned accessibility upgrade** — retrieve DataMall `GeospatialWholeIsland` layers (`CoveredLinkWay`, with `Footpath` and `TrainStationExit` only when useful) server-side through a bounded cache. Coverage remains unverified until route-geometry matching is reliable. |
+| Personalised Journey Reliability Forecast contract/UI | Implemented |
+| Replay synthetic probability, P50/P90, reasons and confidence/freshness | Implemented and visibly labelled synthetic |
+| Calibrated live on-time probability and statistical P50/P90 | **Not implemented; no real training corpus or promoted artifact yet** |
+| Low-confidence/stale/cold-start forecast fallback | Implemented through the existing deterministic scorer |
+| Opt-in outcomes and 90-day pseudonymous observation schema | Implemented; deployment requires migration 003 |
 | 24-hour and 4-day weather forecasts | **Not implemented** (sample API response files exist in `docs/` for reference only; never fetched live) |
 | Self-hosted routing engine (GraphHopper/Valhalla) | **Not implemented** — considered in design docs, never built; OneMap is the only live routing provider |
 
@@ -98,6 +109,7 @@ Implementation status is intentionally granular rather than a single "done" clai
 - **Affected-segment detection** is a real algorithm, not a fixture: `lib/journey-engine.ts` intersects disruption validity windows against each leg's timing and canonical line/station codes to determine exactly which legs are affected.
 - **Recommendation scoring**: `lib/journey-scoring.ts` applies a nine-factor weighted score tuned to Rachel (deadline safety margin, added walking time, transfer count, MRT crowding, bus wait time, bus vehicle load, etc.) and deterministically resolves ties, so the app always surfaces exactly one recommendation rather than a ranked list a commuter has to interpret. Bus vehicle load (`SEA`/`SDA`/`LSD`) is scored and displayed separately from MRT station crowding and is never folded into it.
 - **Uncertainty is shown, not hidden**: arrival ranges are labelled by their source (live, forecast, replay) and the app avoids presenting them as calibrated statistical confidence, since they have not been validated against observed outcomes.
+- **Forecast integration**: eligible replay probability replaces only `deadlineRisk`; all other score components remain inspectable. Live routes retain the current rule until a calibrated artifact passes the documented eligibility gates.
 
 ### Planned rain-shelter and accessibility extension
 
@@ -146,6 +158,7 @@ What does exist:
 - Before judging, we intend to actually run the full suite ourselves and report the real, reproducible result here rather than an unverified narrative claim.
 
 The planned upgrade adds testable, deterministic acceptance criteria: existing saved routines default to Standard commute; verified shelter data increases the rain penalty for exposed walking and can favour a better-sheltered route; unavailable shelter data leaves Standard mode functional without a false coverage claim; and a replay route with a matching required-lift outage is rejected in Accessible travel. Provider-contract and Playwright coverage will also check visible source/freshness/replay labels, the no-verified-accessible-route state, mobile/keyboard accessibility, and that live failures never fall back to fixtures. Existing bus arrival/load behaviour remains covered and is not evidence of accessibility.
+The synthetic replay ensemble is tested for contract, ordering, reasons and fallback behavior, not reported as accuracy. A future real model will use chronological held-out days; required evidence includes calibration/Brier score, P50/P90 pinball loss and coverage, deadline misses/unnecessary reroutes, and disruption/rain/mode/route slices. No live reliability claim will be added without sample count, evaluation period and deterministic baseline.
 
 ## 10. Known limitations and next steps before final judging
 
@@ -156,6 +169,7 @@ The planned upgrade adds testable, deterministic acceptance criteria: existing s
 - Only the 2-hour weather forecast is live; it is area-level rather than street-level. The 24-hour/4-day files are unused reference samples, not integrations.
 - The interactive mode toggle is not stored in the current server-side push profile. Therefore scheduled push checks currently use Standard commute. The planned work must either add a migration, validation, and safe Standard default to persist the preference, or retain this explicit local-only limitation.
 - ETA/arrival ranges are rule-based and have not been calibrated against observed outcomes.
+- Replay reliability probabilities are synthetic demonstration output, not calibrated live performance; no real actual-arrival training corpus exists yet.
 - The demand-aware rerouting demo is a single-process, pseudonymous, synthetic-data demonstration — not a production telemetry or prediction system.
 - Web Push delivery is best-effort and platform-dependent; the in-app manual check remains the reliable fallback. There is no user account or cross-device routine sync.
 - No CI and no independently verified test-run record yet; OSM attribution rendering also still needs a final live-map visual check.
@@ -188,7 +202,7 @@ npm run build
 npm run start
 ```
 
-Environment variables required (see `.env.example` for the full list; no values are committed): `LTA_DATAMALL_ACCOUNT_KEY`, `ONEMAP_ACCESS_TOKEN` (or `ONEMAP_EMAIL` / `ONEMAP_PASSWORD` for auto-refreshed auth), `LIVE_PROVIDERS_ENABLED`, `DATABASE_URL` / `MIGRATION_DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`, `PUSH_ENABLED`, `DEMAND_DEMO_ENABLED`, `NEXT_PUBLIC_MAP_STYLE_URL`. Web Push requires HTTPS (a secure context), so live push testing needs a deployed HTTPS URL rather than plain `localhost`.
+Environment variables required (see `.env.example` for the full list; no values are committed): `LTA_DATAMALL_ACCOUNT_KEY`, `ONEMAP_ACCESS_TOKEN` (or `ONEMAP_EMAIL` / `ONEMAP_PASSWORD` for auto-refreshed auth), `LIVE_PROVIDERS_ENABLED`, `DATABASE_URL` / `MIGRATION_DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`, `PUSH_ENABLED`, `DEMAND_DEMO_ENABLED`, reliability feature flags, and `NEXT_PUBLIC_MAP_STYLE_URL`. Web Push requires HTTPS (a secure context), so live push testing needs a deployed HTTPS URL rather than plain `localhost`.
 
 Test/quality gates: `npm run lint`, `npm run test:unit`, `npm run test:contracts`, `npm run test:e2e` (run `npx playwright install` once first), `npm run build`.
 

@@ -34,3 +34,9 @@ Physical-device results are a release gate and must not be marked complete from 
 ## Claim discipline
 
 Report scenario count, baseline, measurement method, and limitations with every numeric outcome. Do not describe synthetic demand, deterministic ranges, or scores as calibrated predictions.
+
+## Reliability-model evaluation
+
+Replay tests validate the synthetic ensemble's contract, route ordering, reasons, quantiles, explicit label and live fallback. They do not measure prediction accuracy. The real-model release protocol is defined in [PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md](PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md): use chronological held-out days and complete event windows, not a random row split, and compare with the deterministic scorer and provider ETA.
+
+Required evidence includes Brier score/calibration for on-time probability; pinball loss and empirical coverage for P50/P90; deadline misses, unnecessary reroutes and useful-alert precision for commuter value; and latency, fallback and stale-data rates. Publish the evaluation period, sample count, slices and baseline beside every result. Low-confidence, stale, unsupported and schema-mismatched cases must fall back without showing a calibrated percentage.

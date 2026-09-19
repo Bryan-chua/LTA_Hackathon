@@ -1,5 +1,7 @@
 # Smart Commuter Companion
-The current slice includes Today, Compare and Journey views, a real OSM-based map, fixture provider boundaries, affected-leg detection, a deterministic route recommendation, active-journey persistence and a production service worker. Live OneMap and DataMall credentials are not required yet; copy `.env.example` to `.env.local` when those adapters are added.
+Smart Commuter Companion is a mobile-first PWA with replay and live modes. The live path uses Google Maps Routes for public-transport candidates, OneMap for Singapore address search, LTA DataMall for train conditions and crowding, and data.gov.sg for weather. It can run scheduled morning checks and deliver opt-in Web Push while keeping the editable routine authoritative on the device.
+
+For the judging deployment, start with [the Google Cloud guide](docs/DEPLOYMENT_GOOGLE_CLOUD.md).
 
 ## Implementation tracker
 
@@ -38,8 +40,8 @@ This checklist is the working delivery order. Update it as each slice is impleme
   - [x] Calculate deadline risk, delay, walking, transfers, crowding and route churn.
   - [x] Apply configurable Rachel-specific weights.
   - [x] Return a human-readable score breakdown to the Compare screen.
-- [x] **4. Provider integrations** — implemented; live credential verification remains deployment work.
-  - [x] Add authenticated OneMap geocoding and public-transport routing.
+- [x] **4. Provider integrations** — implemented; production credential verification remains deployment work.
+  - [x] Add OneMap geocoding and Google Maps public-transport routing.
   - [x] Add a schema-validated DataMall `TrainServiceAlerts` adapter.
   - [x] Add separate forecast/real-time crowding and weather adapters.
   - [x] Store provenance, timestamps, validity and replay/live state consistently.
@@ -47,7 +49,7 @@ This checklist is the working delivery order. Update it as each slice is impleme
   - [x] Add an editable IndexedDB-owned routine.
   - [x] Implement `Run live morning check`.
   - [x] Trigger advice only when deadline or disruption thresholds are crossed.
-  - [x] Add PostgreSQL fingerprinting, cooldown records, Vercel scheduling and Web Push.
+  - [x] Add PostgreSQL fingerprinting, cooldown records, Cloud Scheduler integration and Web Push.
 - [x] **6. Proper offline persistence**
   - [x] Move active-journey storage from `localStorage` to IndexedDB.
   - [x] Cache normalized journeys, conditions, provider provenance, and timestamps for seven days.
@@ -218,7 +220,8 @@ flowchart LR
     Score --> Conditions
     Conditions --> LTA[LTA DataMall adapters]
     Conditions --> Weather[data.gov.sg weather adapter]
-    Router --> OneMap[OneMap]
+    Router --> Google[Google Maps Routes]
+    API --> OneMap[OneMap geocoding]
     Router --> OSMRouter[GraphHopper or Valhalla]
     API --> Cache[(Cache / snapshots)]
     API --> Store[(PostgreSQL + optional PostGIS)]
@@ -229,7 +232,7 @@ flowchart LR
 
 - **PWA:** route summary, comparison view, map, routine setup and offline active-journey view.
 - **Application API:** validates requests, keeps credentials server-side and returns a frontend-friendly journey view model.
-- **Routing adapter:** isolates OneMap, GraphHopper or Valhalla response formats behind one contract.
+- **Routing adapter:** isolates Google Maps Routes and future fallback response formats behind one contract.
 - **Condition normaliser:** maps train, crowding, bus, weather and planned-event feeds into a canonical event model.
 - **Affected-leg detector:** identifies which legs of Rachel's already-planned journey intersect an event.
 - **Alternative engine:** selects reroute boundaries, requests candidate routes and removes infeasible/duplicate results.
@@ -243,7 +246,8 @@ flowchart LR
 | Source | MVP use | Important implementation notes |
 |---|---|---|
 | OpenStreetMap | Required geospatial base, paths and map context | Show attribution everywhere the map or derived data appears. Do not use public OSM tiles or Overpass for heavy/bulk traffic; use a compliant provider, cache, self-host or bundle a static extract. |
-| OneMap | Geocoding and candidate door-to-door routing | Free registration is required. Keep it behind the routing adapter so the engine can be replaced. |
+| Google Maps Routes | Live public-transport route candidates, alternatives, geometry and instructions | Keep the server key private and restricted to the Routes API. LTA feeds remain authoritative for Singapore disruptions and crowding. |
+| OneMap | Singapore address search and geocoding | Use the access token only on the server. OneMap's public themes catalogue does not currently expose pedestrian sheltered walkways. |
 | GraphHopper or Valhalla | Self-hostable OSM routing for walking/cycling/road legs | Public transport requires suitable transit data/configuration; do not assume OSM alone provides a complete Singapore timetable. Prefer Valhalla if multimodal/transit support is configured; prefer GraphHopper for a simpler street-routing fallback. |
 | DataMall `TrainServiceAlerts` | Official structured disruption and mitigation feed | `Status`, `AffectedSegments` and separate `Message` arrays must be handled. Feed is often quiet, so use labelled replay data for judging. |
 | DataMall `PCDRealTime` | Current station crowd level | One line per request; refreshed about every 10 minutes; values are low/moderate/high/NA. |
@@ -275,6 +279,7 @@ Singapore's transport network contains loops, bidirectional travel, circular ser
 Instead:
 
 1. Ask OneMap, Google Routes, GraphHopper or Valhalla for feasible route candidates.
+1. Ask Google Maps Routes for feasible transit route candidates.
 2. Convert each response into a provider-neutral ordered list of journey legs.
 3. Treat one planned journey as an ordered, acyclic path for analysis.
 4. Detect the affected leg range.
@@ -294,6 +299,7 @@ interface Journey {
   arrival: { p50: string; earliest: string; latest: string };
   legs: JourneyLeg[]; // ordered
   source: "onemap" | "google" | "graphhopper" | "valhalla" | "fixture";
+  source: "google" | "onemap" | "graphhopper" | "valhalla" | "fixture";
   generatedAt: string;
 }
 
@@ -315,9 +321,9 @@ interface JourneyLeg {
 
 ### Routing provider decision
 
-- **Fastest MVP:** OneMap for geocoding and initial public-transport candidates, with OSM/MapLibre for the required map base.
+- **Current live path:** Google Maps Routes for public-transport candidates, OneMap for Singapore address search, and OSM/MapLibre for the required displayed map base.
 - **More control:** self-host Valhalla or GraphHopper using an OSM Singapore extract for street legs. Confirm transit/timetable support before relying on it for rail and bus.
-- **Recommended design:** implement `RoutingProvider` once, begin with OneMap plus fixtures, and keep Valhalla/GraphHopper as interchangeable adapters or fallbacks.
+- **Fallback design:** keep the provider-neutral journey contract so Valhalla/GraphHopper or labelled replay fixtures can remain interchangeable fallbacks.
 
 The team should run a one-day spike against the Rachel journey before locking the provider. Validate door-to-door coverage, transit modes, response licence/terms, geometry quality, latency and reproducibility.
 
@@ -405,6 +411,8 @@ Suppress duplicate alerts using an event/routine/recommendation fingerprint and 
 ### Later prediction option
 
 Once enough labelled history exists, estimate `P(arrive by deadline | route, departure, conditions)` using a calibrated model. Compare it with the deterministic baseline on held-out replay days. Do not ship the model unless it improves a commuter-facing measure and can explain its inputs and uncertainty.
+
+The implemented **Personalised Journey Reliability Forecast** is documented in [`docs/PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md`](docs/PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md). Replay scenarios use a small, visibly labelled synthetic gradient-boosted decision-stump ensemble to exercise probability, P50/P90, reasons and confidence/freshness. Live journeys remain on mandatory deterministic fallback until a real model passes calibration gates. Separate opt-in outcomes are retained pseudonymously for 90 days to build that future corpus; Cloud Run transition remains deferred.
 
 ## 12. Rerouting and scoring
 
@@ -717,7 +725,7 @@ If time is tight, keep a single `apps/web` package and move code into packages o
 
 ## 20. Assumptions and limitations
 
-- OneMap routing capability, quotas and response terms must be verified with real credentials before it becomes the primary provider.
+- Google Maps Routes quotas, API-key restrictions and response terms must be reviewed before public launch; OneMap remains the Singapore geocoder.
 - Self-hosted GraphHopper/Valhalla requires infrastructure and appropriate transit data/configuration; an OSM extract alone may not supply complete scheduled public-transport routing.
 - Live train disruptions are uncommon. The judged major-disruption flow will use clearly labelled, source-shaped replay data.
 - DataMall line codes differ across endpoints and require explicit canonical mapping.

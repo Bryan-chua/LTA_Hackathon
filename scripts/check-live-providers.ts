@@ -1,6 +1,7 @@
 import type { Journey, Routine } from "../lib/domain";
 import { crowdingForLine, trainServiceConditions } from "../lib/live/datamall";
-import { OneMapRoutingProvider } from "../lib/live/onemap";
+import { GoogleRoutesProvider } from "../lib/live/google-routes";
+import { geocodeOneMap } from "../lib/live/onemap";
 import { weatherConditions } from "../lib/live/weather";
 
 const checkRoutine: Routine = {
@@ -31,7 +32,7 @@ const weatherJourney: Journey = {
   destination: checkRoutine.destination,
   departureAt: new Date().toISOString(),
   arrival: { p50: "08:30", earliest: "08:25", latest: "08:35" },
-  source: "onemap",
+  source: "google",
   generatedAt: new Date().toISOString(),
   legs: [{
     id: "provider-check-walk",
@@ -48,12 +49,13 @@ const weatherJourney: Journey = {
 
 async function main() {
   const checks = await Promise.allSettled([
-    new OneMapRoutingProvider().plan(checkRoutine),
+    new GoogleRoutesProvider().plan(checkRoutine),
+    geocodeOneMap("Tampines MRT"),
     trainServiceConditions(),
     crowdingForLine("EWL", "realtime"),
     weatherConditions([weatherJourney]),
   ]);
-  const names = ["OneMap routing", "LTA train alerts", "LTA EWL crowding", "data.gov.sg weather"];
+  const names = ["Google Maps routing", "OneMap geocoding", "LTA train alerts", "LTA EWL crowding", "data.gov.sg weather"];
   let failed = false;
 
   checks.forEach((result, index) => {

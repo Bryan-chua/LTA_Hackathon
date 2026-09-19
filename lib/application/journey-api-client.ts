@@ -51,6 +51,11 @@ export async function requestReliabilityConsent(method: "GET" | "POST" | "DELETE
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error?.message ?? "Could not update reliability consent.");
   return payload.data?.consented === true;
+    ...(method === "GET" ? {} : { headers: { "content-type": "application/json" } }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message ?? "Could not update forecast consent.");
+  return payload.data.consented === true;
 }
 
 export async function submitReliabilityFeedback(input: {
@@ -58,6 +63,8 @@ export async function submitReliabilityFeedback(input: {
   arrivedBeforeDeadline: boolean;
   tookRecommended: boolean;
   actualArrival?: string;
+  actualArrival?: string;
+  tookRecommended: boolean;
 }): Promise<void> {
   const response = await fetch("/api/reliability/feedback", {
     method: "POST",
@@ -67,4 +74,5 @@ export async function submitReliabilityFeedback(input: {
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error?.message ?? "Could not save reliability feedback.");
+  if (!response.ok) throw new Error(payload.error?.message ?? "Could not save journey feedback.");
 }

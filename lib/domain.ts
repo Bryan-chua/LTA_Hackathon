@@ -86,7 +86,7 @@ export interface Journey {
   departureAt: string;
   arrival: ArrivalRange;
   legs: JourneyLeg[];
-  source: "onemap" | "google" | "graphhopper" | "valhalla" | "fixture";
+  source: "google" | "onemap" | "graphhopper" | "valhalla" | "fixture";
   generatedAt: string;
   provider?: ProviderMetadata;
 }
@@ -163,10 +163,10 @@ export interface JourneyReliabilityForecast {
   likelyArrival: { from: string; to: string };
   reasons: ReliabilityReason[];
   confidence: "high" | "medium" | "low";
-  freshness: ProviderMode | "stale";
+  freshness: "live" | "forecast" | "cached" | "stale" | "replay";
   dataCompleteness: number;
-  fallbackReason?: "model_unavailable" | "stale_critical_data" | "insufficient_similar_journeys"
-    | "unsupported_route" | "schema_mismatch";
+  fallbackReason?: "model_unavailable" | "stale_critical_data"
+    | "insufficient_similar_journeys" | "unsupported_route" | "schema_mismatch";
   observationId?: string;
 }
 
