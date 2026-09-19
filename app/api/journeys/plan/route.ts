@@ -9,13 +9,17 @@ import { planLiveJourney } from "@/lib/live/live-planner";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => null)) as { scenarioId?: unknown; demandProfile?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as { scenarioId?: unknown; demandProfile?: unknown; travelMode?: unknown } | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) return invalidRequest("Expected a JSON object.");
+    if (body.travelMode !== undefined && body.travelMode !== "standard" && body.travelMode !== "accessible") {
+      return invalidRequest("travelMode must be 'standard' or 'accessible'.");
+    }
+    const travelMode = body.travelMode as "standard" | "accessible" | undefined;
     const liveBody = body as typeof body & { dataMode?: unknown; routine?: unknown };
     if (liveBody.dataMode === "live") {
       const routine = routineSchema.safeParse(liveBody.routine);
       if (!routine.success) return invalidRequest(routine.error.issues[0]?.message ?? "Invalid routine.");
-      const data = await planLiveJourney(routine.data);
+      const data = await planLiveJourney(routine.data, new Date(), travelMode);
       const response: ApiSuccess<JourneyPlanView> = { data };
       return Response.json(response, { headers: noStore });
     }
@@ -28,7 +32,7 @@ export async function POST(request: Request) {
     if (body.demandProfile !== undefined && !demandDemoEnabled()) return invalidRequest("Demand demo is disabled.");
     const scenarioId = body.scenarioId ?? "ewl-disruption";
     const profile = body.demandProfile;
-    const data = await journeyOrchestrator.plan({ scenarioId,
+    const data = await journeyOrchestrator.plan({ scenarioId, travelMode,
       demand: profile ? { profile, selections: demandStore.selections(scenarioId, profile) } : undefined });
     const response: ApiSuccess<JourneyPlanView> = { data };
     return Response.json(response, { headers: noStore });

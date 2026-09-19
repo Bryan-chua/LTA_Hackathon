@@ -1,9 +1,10 @@
-import type { CrowdingLevel, Journey, ProviderMetadata, Routine, Scenario, TravelCondition } from "../domain";
+import type { CrowdingLevel, Journey, ProviderMetadata, Routine, Scenario, TravelCondition, TravelMode } from "../domain";
 import { buildAlternatives, findAffectedSegments } from "../journey-engine";
-import { buildRecommendation } from "../application/journey-orchestrator";
+import { buildRecommendation, scoreWeightsFor } from "../application/journey-orchestrator";
 import type { JourneyPlanView, ProviderStateView } from "../application/journey-view-model";
 import { OneMapRoutingProvider } from "./onemap";
 import { crowdingForLine, trainServiceConditions } from "./datamall";
+import { enrichBusLegs } from "./bus-enrichment";
 import { weatherConditions } from "./weather";
 
 const crowdRank: Record<CrowdingLevel, number> = { unknown: 0, low: 1, moderate: 2, high: 3 };
@@ -51,7 +52,7 @@ async function enrichCrowding(journeys: Journey[], now: Date): Promise<{ journey
   };
 }
 
-export async function planLiveJourney(routine: Routine, now = new Date()): Promise<JourneyPlanView> {
+export async function planLiveJourney(routine: Routine, now = new Date(), travelMode?: TravelMode): Promise<JourneyPlanView> {
   const routing = new OneMapRoutingProvider();
   const journeys = await routing.plan(routine);
   const [alerts, weather] = await Promise.allSettled([trainServiceConditions(now), weatherConditions(journeys, now)]);
@@ -70,8 +71,10 @@ export async function planLiveJourney(routine: Routine, now = new Date()): Promi
 
   const crowded = await enrichCrowding(journeys, now);
   providers.push(...crowded.providers);
-  const [usual, ...candidates] = crowded.journeys;
-  const alternatives = buildAlternatives(usual, candidates, routine.arrivalDeadline, conditions);
+  const bused = await enrichBusLegs(crowded.journeys, now);
+  providers.push(...bused.providers);
+  const [usual, ...candidates] = bused.journeys;
+  const alternatives = buildAlternatives(usual, candidates, routine.arrivalDeadline, conditions, scoreWeightsFor(travelMode));
   const selected = alternatives.find((alternative) => alternative.recommended)?.journey;
   const scenario: Scenario = {
     id: "normal",

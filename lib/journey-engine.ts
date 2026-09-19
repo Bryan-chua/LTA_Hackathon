@@ -1,6 +1,6 @@
 import type { AffectedSegment, Alternative, Journey, JourneyLeg, TravelCondition } from "./domain";
 import { canonicalLineId, canonicalStationCodes } from "./canonical-transit";
-import { scoreJourneyCandidates } from "./journey-scoring";
+import { scoreJourneyCandidates, type JourneyScoreWeights } from "./journey-scoring";
 
 interface TraversalWindow {
   startsAt: number;
@@ -148,6 +148,7 @@ export function buildAlternatives(
   recommended: Journey | Journey[] | undefined,
   deadline: string,
   conditions: TravelCondition[],
+  weights?: JourneyScoreWeights,
 ): Alternative[] {
-  return scoreJourneyCandidates(usual, recommended, deadline, conditions);
+  return scoreJourneyCandidates(usual, recommended, deadline, conditions, weights);
 }

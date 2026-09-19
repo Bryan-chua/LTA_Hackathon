@@ -1,4 +1,4 @@
-import type { Coordinate, Journey, JourneyLeg, JourneyLegGeometrySection, Place, Routine, Scenario, TravelCondition } from "./domain";
+import type { BusArrivalInfo, Coordinate, Journey, JourneyLeg, JourneyLegGeometrySection, Place, Routine, Scenario, TravelCondition } from "./domain";
 
 const place = (name: string, shortName: string, lng: number, lat: number): Place => ({
   name,
@@ -62,6 +62,132 @@ const railLeg = (
   geometry,
   geometrySections,
 });
+
+const busLeg = (
+  id: string,
+  sequence: number,
+  from: Place,
+  to: Place,
+  serviceNo: string,
+  durationMinutes: number,
+  instruction: string,
+  geometry: Coordinate[],
+  busArrival: BusArrivalInfo,
+): JourneyLeg => ({
+  id,
+  sequence,
+  mode: "bus",
+  from,
+  to,
+  lineId: serviceNo,
+  lineName: `Bus ${serviceNo}`,
+  instruction,
+  durationMinutes,
+  uncertaintyMinutes: 5,
+  geometry,
+  busArrival,
+});
+
+export const tampinesBusInterchange = place("Tampines Bus Interchange", "Tampines Interchange", 103.9434, 1.3541);
+export const marineParadeMrt = place("Marine Parade MRT", "Marine Parade", 103.9046, 1.3029);
+export const shentonWayMrt = place("Shenton Way MRT", "Shenton Way", 103.8503, 1.2777);
+
+function bus31TelLegs(busArrival: BusArrivalInfo, durationMinutes: number): JourneyLeg[] {
+  return [
+    walkLeg("bus31-walk-start", 0, home, tampinesBusInterchange, 6, "Walk to Tampines Bus Interchange."),
+    busLeg(
+      "bus31-leg",
+      1,
+      tampinesBusInterchange,
+      marineParadeMrt,
+      "31",
+      durationMinutes,
+      "Take Bus 31 to Marine Parade MRT.",
+      [
+        tampinesBusInterchange.coordinate,
+        { lng: 103.9302, lat: 1.3354 },
+        { lng: 103.9167, lat: 1.3185 },
+        marineParadeMrt.coordinate,
+      ],
+      busArrival,
+    ),
+    railLeg(
+      "bus31-tel",
+      2,
+      marineParadeMrt,
+      shentonWayMrt,
+      "TEL",
+      "Thomson-East Coast Line",
+      ["TE26", "TE19"],
+      18,
+      "Take the Thomson-East Coast Line towards Woodlands North and alight at Shenton Way.",
+      [
+        marineParadeMrt.coordinate,
+        { lng: 103.8862, lat: 1.2991 },
+        { lng: 103.8634, lat: 1.2824 },
+        shentonWayMrt.coordinate,
+      ],
+    ),
+    walkLeg("bus31-walk-end", 3, shentonWayMrt, office, 8, "Walk from Shenton Way MRT to the office."),
+  ];
+}
+
+// On-time case: a fast, low-load next bus keeps this option competitive.
+export const bus31TelJourney: Journey = {
+  id: "bus-31-tel-route",
+  name: "Bus 31 + Thomson-East Coast Line",
+  origin: home,
+  destination: office,
+  departureAt: "2026-09-18T07:35:00+08:00",
+  arrival: { p50: "08:40", earliest: "08:36", latest: "08:44" },
+  legs: bus31TelLegs({
+    status: "available",
+    serviceNo: "31",
+    boardingStopCode: "75009",
+    alightingStopCode: "84009",
+    etaMinutes: 3,
+    load: "SEA",
+    observedAt: "2026-09-18T07:35:00+08:00",
+    staleAt: "2026-09-18T07:35:20+08:00",
+    provider: { source: "LTA DataMall BusArrival", mode: "replay", fetchedAt: "2026-09-18T07:35:00+08:00", warnings: [] },
+  }, 22),
+  source: "fixture",
+  generatedAt: "07:30",
+};
+
+// Delayed/high-load case: a long next-bus wait plus limited standing load should push
+// this option's score high enough that a competing alternative wins instead.
+export const bus31TelDelayedJourney: Journey = {
+  ...bus31TelJourney,
+  id: "bus-31-tel-route-delayed",
+  name: "Bus 31 + Thomson-East Coast Line (delayed)",
+  arrival: { p50: "08:58", earliest: "08:52", latest: "09:06" },
+  legs: bus31TelLegs({
+    status: "available",
+    serviceNo: "31",
+    boardingStopCode: "75009",
+    alightingStopCode: "84009",
+    etaMinutes: 19,
+    load: "LSD",
+    observedAt: "2026-09-18T07:35:00+08:00",
+    staleAt: "2026-09-18T07:35:20+08:00",
+    provider: { source: "LTA DataMall BusArrival", mode: "replay", fetchedAt: "2026-09-18T07:35:00+08:00", warnings: [] },
+  }, 37),
+};
+
+// Data-unavailable case: provider failure must never be presented as a favourable ETA or load.
+export const bus31TelUnavailableJourney: Journey = {
+  ...bus31TelJourney,
+  id: "bus-31-tel-route-unavailable",
+  name: "Bus 31 + Thomson-East Coast Line (data unavailable)",
+  legs: bus31TelLegs({
+    status: "unavailable",
+    serviceNo: "31",
+    boardingStopCode: "75009",
+    alightingStopCode: "84009",
+    reason: "Bus arrival data is unavailable for this stop.",
+  }, 22),
+};
 
 const routine: Routine = {
   id: "rachel-weekday",

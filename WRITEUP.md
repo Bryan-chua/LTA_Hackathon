@@ -8,7 +8,7 @@ PS2 asks for proactive decision support during transit disruptions: reach commut
 
 We scoped the MVP to one of the brief's three personas, **Rachel**: a fixed-schedule EWL commuter travelling Tampines → Raffles Place, departing 07:40, with an 08:45 arrival deadline. Rachel doesn't want a dashboard — she wants the app to stay silent when her commute is safe, and to say one clear thing when it isn't: what to do, and what it costs her.
 
-We deliberately did not build for the brief's other two personas (Arjun, the comfort-optimising multi-modal commuter; Mdm Lim, the accessibility-constrained occasional traveller). The scoring model, UI copy, and notification logic are tuned to Rachel's deadline-risk framing and should not be read as equally suited to them.
+We deliberately did not build for the brief's other two personas (Arjun, the comfort-optimising multi-modal commuter; Mdm Lim, the accessibility-constrained occasional traveller). The scoring model, UI copy, and notification logic are tuned to Rachel's deadline-risk framing and should not be read as equally suited to them. An "Accessible" travel-mode toggle (§10) exists as a minimal scoring reweighting (transfers and walking count more), not as validated support for Mdm Lim's needs — there is still no verified accessibility data source, and the app never claims a route, stop, or bus is accessible.
 
 ## 2. User journey / what the demo shows
 
@@ -78,7 +78,8 @@ Implementation status is intentionally granular rather than a single "done" clai
 | Web Push (VAPID) subscribe/send/test | Implemented, needs a real VAPID keypair + HTTPS |
 | Deadline-risk morning-check + Supabase Cron worker | Implemented |
 | Synthetic demand-aware rerouting demo | Implemented as a single-process, pseudonymous, explicitly-labelled demo (§4) |
-| Bus arrival / `Load` occupancy (LTA DataMall v3/BusArrival) | **Not implemented** |
+| Bus arrival / `Load` occupancy (LTA DataMall `v3/BusArrival`, `BusStops`, `BusRoutes`) | Implemented for standard-mode scoring and the Compare/Journey views, requires a real `LTA_DATAMALL_ACCOUNT_KEY`; bus-stop/bus-vehicle accessibility remains unverified and is never inferred from arrival data (see §10) |
+| Accessible travel-mode toggle | Implemented as a minimal scoring reweighting (transfers, walking) plus explicit "Accessibility: Unverified" labelling on bus legs; not step-free routing, no accessibility data source (see §10) |
 | Facilities Maintenance / lift-outage data | **Not implemented** |
 | 24-hour and 4-day weather forecasts | **Not implemented** (sample API response files exist in `docs/` for reference only; never fetched live) |
 | Self-hosted routing engine (GraphHopper/Valhalla) | **Not implemented** — considered in design docs, never built; OneMap is the only live routing provider |
@@ -88,7 +89,7 @@ Implementation status is intentionally granular rather than a single "done" clai
 - **Live routing**: `lib/live/onemap.ts` calls OneMap's public-transport routing service directly (geocoding + `routeType=pt&mode=transit`), returning up to three real itineraries with decoded polyline geometry.
 - **Replay/demo routing**: `lib/fixtures.ts` provides hand-authored, deterministic `Journey`/`JourneyLeg` fixtures for the three named scenarios. This is what judges see by default (no credentials required) and is explicitly labelled as replay in the UI, not presented as live.
 - **Affected-segment detection** is a real algorithm, not a fixture: `lib/journey-engine.ts` intersects disruption validity windows against each leg's timing and canonical line/station codes to determine exactly which legs are affected.
-- **Recommendation scoring**: `lib/journey-scoring.ts` applies a seven-factor weighted score tuned to Rachel (deadline safety margin, added walking time, transfer count, crowding, etc.) and deterministically resolves ties, so the app always surfaces exactly one recommendation rather than a ranked list a commuter has to interpret.
+- **Recommendation scoring**: `lib/journey-scoring.ts` applies a nine-factor weighted score tuned to Rachel (deadline safety margin, added walking time, transfer count, MRT crowding, bus wait time, bus vehicle load, etc.) and deterministically resolves ties, so the app always surfaces exactly one recommendation rather than a ranked list a commuter has to interpret. Bus vehicle load (`SEA`/`SDA`/`LSD`) is scored and displayed separately from MRT station crowding and is never folded into it.
 - **Uncertainty is shown, not hidden**: arrival ranges are labelled by their source (live, forecast, replay) and the app avoids presenting them as calibrated statistical confidence, since they have not been validated against observed outcomes.
 
 ## 7. Data sources: actual vs. planned
@@ -100,7 +101,7 @@ Implementation status is intentionally granular rather than a single "done" clai
 | OneMap geocoding + public-transport routing | **Live**, real HTTP calls (`lib/live/onemap.ts`) |
 | data.gov.sg 2-hour weather forecast | **Live**, applied to walking legs |
 | data.gov.sg 24-hour / 4-day weather forecast | **Planned, not implemented** — sample response files kept for reference only |
-| LTA DataMall bus arrival / `Load` occupancy (`v3/BusArrival`) | **Planned, not implemented** |
+| LTA DataMall bus arrival / `Load` occupancy (`v3/BusArrival`, `BusStops`, `BusRoutes`) | **Live**, real HTTP calls scoped to stops used by current candidate journeys, Zod-validated (`lib/live/bus-arrival.ts`, `lib/live/bus-reference.ts`) |
 | LTA DataMall Facilities Maintenance (lift outages) | **Planned, not implemented** — relevant to the accessibility persona we did not target |
 | OpenStreetMap (via MapLibre + OSM-derived vector tiles) | **Live**, used as the map base layer; OSM is not used for route computation itself |
 
@@ -128,7 +129,7 @@ What does exist:
 ## 10. Known limitations and next steps before final judging
 
 - Built and tuned for one persona (Rachel) and one city/timezone; not validated against Arjun's or Mdm Lim's needs.
-- Bus occupancy/`Load` data and lift-outage data are not integrated — the accessibility-relevant data sources named in the brief are absent from this build.
+- Bus arrival/`Load` data is integrated (§5, §6) as a reliability signal for scoring. A minimal Accessible travel-mode toggle exists (header, both replay and live plans) that reweights scoring toward transfers and walking distance — the two already-measured factors that matter most without verified step-free data. It is not step-free routing: it does not filter routes, and bus-stop/bus-vehicle accessibility is always shown as unverified, never inferred from the presence of arrival data. Facilities Maintenance / lift-outage data — the actual accessibility-relevant source named in the brief — is still not integrated.
 - Only the 2-hour weather forecast is live; 24-hour/4-day forecasts are unused reference files, not integrations.
 - ETA/arrival ranges are rule-based and have not been calibrated against observed outcomes.
 - The demand-aware rerouting demo is a single-process, pseudonymous, synthetic-data demonstration — not a production telemetry or prediction system.

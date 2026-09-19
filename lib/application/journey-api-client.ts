@@ -1,12 +1,12 @@
-import type { Routine, Scenario } from "../domain";
+import type { Routine, Scenario, TravelMode } from "../domain";
 import type { ApiFailure, ApiSuccess, JourneyPlanView } from "./journey-view-model";
 import type { DemandProfile } from "../demand-flow";
 
-export async function requestJourneyPlan(scenarioId: Scenario["id"], demandProfile?: DemandProfile): Promise<JourneyPlanView> {
+export async function requestJourneyPlan(scenarioId: Scenario["id"], demandProfile?: DemandProfile, travelMode?: TravelMode): Promise<JourneyPlanView> {
   const response = await fetch("/api/journeys/plan", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ scenarioId, demandProfile }),
+    body: JSON.stringify({ scenarioId, demandProfile, travelMode }),
     signal: AbortSignal.timeout(10_000),
   });
   const payload = (await response.json()) as ApiSuccess<JourneyPlanView> | ApiFailure;
@@ -18,11 +18,11 @@ export async function requestJourneyPlan(scenarioId: Scenario["id"], demandProfi
   return payload.data;
 }
 
-export async function requestMorningCheck(routine: Routine): Promise<JourneyPlanView> {
+export async function requestMorningCheck(routine: Routine, travelMode?: TravelMode): Promise<JourneyPlanView> {
   const response = await fetch("/api/morning-check", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ routine, dataMode: "live" }),
+    body: JSON.stringify({ routine, dataMode: "live", travelMode }),
     signal: AbortSignal.timeout(25_000),
   });
   const payload = await response.json();

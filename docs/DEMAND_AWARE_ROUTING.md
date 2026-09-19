@@ -46,7 +46,7 @@ flowchart TD
     API --> Store[One latest selection per browser]
     Store -->|Manual refresh| Forecast
     Forecast --> Delay[Projected crowding and boarding delay]
-    Delay --> Score[Existing seven-factor scorer]
+    Delay --> Score[Existing nine-factor scorer]
     Score --> Advice[Today and Compare]
     Advice --> Selection
     Selection --> Frozen[Stable active journey in this page session]

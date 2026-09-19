@@ -1,5 +1,6 @@
 import type {
   Alternative,
+  BusLoadCode,
   CrowdingLevel,
   Journey,
   ScoreBreakdown,
@@ -12,12 +13,31 @@ export type JourneyScoreWeights = Record<ScoreComponentKey, number>;
 
 export const RACHEL_SCORE_WEIGHTS: Readonly<JourneyScoreWeights> = {
   deadlineRisk: 0.40,
-  expectedArrivalPenalty: 0.25,
-  uncertaintyPenalty: 0.15,
+  expectedArrivalPenalty: 0.20,
+  uncertaintyPenalty: 0.12,
   transferPenalty: 0.08,
   walkingAndRainPenalty: 0.05,
   crowdingPenalty: 0.04,
   routeChangePenalty: 0.03,
+  busWaitPenalty: 0.05,
+  busLoadPenalty: 0.03,
+};
+
+// Accessible travel mode has no verified step-free, lift, or wheelchair-accessible-bus
+// data source (see lib/domain.ts BusArrivalInfo and WRITEUP.md). Rather than invent an
+// accessibility score from data we don't have, this weighting leans harder on the two
+// already-measured signals that matter most when a route isn't known to be step-free:
+// transfers and walking distance. It does not filter or rank by accessibility itself.
+export const ACCESSIBLE_SCORE_WEIGHTS: Readonly<JourneyScoreWeights> = {
+  deadlineRisk: 0.28,
+  expectedArrivalPenalty: 0.14,
+  uncertaintyPenalty: 0.08,
+  transferPenalty: 0.20,
+  walkingAndRainPenalty: 0.15,
+  crowdingPenalty: 0.05,
+  routeChangePenalty: 0.03,
+  busWaitPenalty: 0.04,
+  busLoadPenalty: 0.03,
 };
 
 interface ScoreContext {
@@ -36,6 +56,11 @@ interface CandidateMetrics {
   uncertaintyMinutes: number;
   deadlineRiskMinutes: number;
   routeChangeLabel: string;
+}
+
+interface PenaltyPoint {
+  normalized: number;
+  label: string;
 }
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -76,10 +101,59 @@ const crowdingValues: Record<CrowdingLevel, number> = {
   unknown: 0.6,
 };
 
+// Rail-only: bus vehicle load is a distinct signal (see busLoadValues) and must never
+// be reported as MRT station crowding.
 const worstCrowding = (journey: Journey): CrowdingLevel => {
-  const levels = journey.legs.map((leg) => leg.crowding).filter((level): level is CrowdingLevel => Boolean(level));
+  const levels = journey.legs
+    .filter((leg) => leg.mode === "rail")
+    .map((leg) => leg.crowding)
+    .filter((level): level is CrowdingLevel => Boolean(level));
   return levels.sort((left, right) => crowdingValues[right] - crowdingValues[left])[0] ?? "unknown";
 };
+
+const busLoadValues: Record<BusLoadCode | "unavailable", number> = {
+  SEA: 0.1,
+  SDA: 0.5,
+  LSD: 1,
+  unavailable: 0.6,
+};
+
+const busLoadLabel: Record<BusLoadCode, string> = {
+  SEA: "Seats available",
+  SDA: "Standing available",
+  LSD: "Limited standing",
+};
+
+const busLegsOf = (journey: Journey) => journey.legs.filter((leg) => leg.mode === "bus");
+
+// Longer than a 15-minute wait is treated as the worst case rather than scaling forever.
+const BUS_WAIT_CEILING_MINUTES = 15;
+
+function worstBusWait(journey: Journey): PenaltyPoint {
+  const legs = busLegsOf(journey);
+  if (legs.length === 0) return { normalized: 0, label: "No bus leg" };
+  const points = legs.map((leg): PenaltyPoint => {
+    const arrival = leg.busArrival;
+    if (!arrival || arrival.status !== "available" || arrival.etaMinutes === undefined) {
+      return { normalized: 0.6, label: "Bus ETA unavailable" };
+    }
+    return { normalized: clamp(arrival.etaMinutes / BUS_WAIT_CEILING_MINUTES), label: `${arrival.etaMinutes} min bus wait` };
+  });
+  return points.sort((left, right) => right.normalized - left.normalized)[0];
+}
+
+function worstBusLoad(journey: Journey): PenaltyPoint {
+  const legs = busLegsOf(journey);
+  if (legs.length === 0) return { normalized: 0, label: "No bus leg" };
+  const points = legs.map((leg): PenaltyPoint => {
+    const arrival = leg.busArrival;
+    if (!arrival || arrival.status !== "available" || !arrival.load) {
+      return { normalized: busLoadValues.unavailable, label: "Bus load unavailable" };
+    }
+    return { normalized: busLoadValues[arrival.load], label: busLoadLabel[arrival.load] };
+  });
+  return points.sort((left, right) => right.normalized - left.normalized)[0];
+}
 
 const weatherMultiplier = (conditions: TravelCondition[]) => {
   const severities = conditions
@@ -148,6 +222,8 @@ function scoreJourney(
   const crowding = worstCrowding(journey);
   const risk = deadlineRisk(journey, context.deadline);
   const churn = routeChange(journey, context.baselineJourney);
+  const busWait = worstBusWait(journey);
+  const busLoad = worstBusLoad(journey);
 
   const components = [
     component(
@@ -197,6 +273,20 @@ function scoreJourney(
       "Route change",
       churn.label,
       churn.normalized,
+      weights,
+    ),
+    component(
+      "busWaitPenalty",
+      "Bus wait",
+      busWait.label,
+      busWait.normalized,
+      weights,
+    ),
+    component(
+      "busLoadPenalty",
+      "Bus load",
+      busLoad.label,
+      busLoad.normalized,
       weights,
     ),
   ];
