@@ -120,7 +120,7 @@ select:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
   .avatar { width: 32px; height: 32px; }
 }
 @media (max-width: 370px) {
-  .scenario-button span { display: none; }.recommendation-card { padding: 18px 16px; }.arrival-row { gap: 10px; }.arrival-row strong { font-size: 24px; }.deadline-state span { display: none; }.route-summary { padding-left: 3px; padding-right: 3px; }.route-summary > div { gap: 4px; }.route-summary svg { width: 16px; }
+  .brand-lockup > div, .scenario-button span { display: none; }.recommendation-card { padding: 18px 16px; }.arrival-row { gap: 10px; }.arrival-row strong { font-size: 24px; }.deadline-state span { display: none; }.route-summary { padding-left: 3px; padding-right: 3px; }.route-summary > div { gap: 4px; }.route-summary svg { width: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -9,6 +9,7 @@ import type {
   ScoreComponentKey,
   TravelCondition,
 } from "./domain";
+import { conditionsAffectingJourney } from "./condition-matching";
 import { forecastJourneyReliability } from "./reliability-forecast";
 
 export type JourneyScoreWeights = Record<ScoreComponentKey, number>;
@@ -157,8 +158,17 @@ function worstBusLoad(journey: Journey): PenaltyPoint {
   return points.sort((left, right) => right.normalized - left.normalized)[0];
 }
 
-const weatherMultiplier = (conditions: TravelCondition[]) => {
+const weatherMultiplier = (journey: Journey, conditions: TravelCondition[]) => {
+  const matchedIds = new Set(conditionsAffectingJourney(journey, conditions).map((condition) => condition.id));
   const severities = conditions
+    .filter((condition) => matchedIds.has(condition.id) || (
+      condition.kind === "weather"
+      && !condition.coordinate
+      && !condition.lineIds?.length
+      && !condition.stationCodes?.length
+      && !condition.modes?.length
+      && journey.legs.some((leg) => leg.mode === "walk")
+    ))
     .filter(({ kind }) => kind === "weather")
     .map(({ severity }) => ({ info: 1.1, minor: 1.25, major: 1.5 })[severity]);
   return severities.length > 0 ? Math.max(...severities) : 1;
@@ -240,7 +250,7 @@ function scoreJourney(
   const uncertaintyMinutes = intervalWidth(journey.arrival.earliest, journey.arrival.latest);
   const transfers = countTransfers(journey);
   const walkingMinutes = countWalkingMinutes(journey);
-  const rainMultiplier = weatherMultiplier(context.conditions);
+  const rainMultiplier = weatherMultiplier(journey, context.conditions);
   const effectiveWalkingMinutes = Math.round(walkingMinutes * rainMultiplier);
   const crowding = worstCrowding(journey);
   const risk = forecastDeadlineRisk(journey, context.deadline, reliability);

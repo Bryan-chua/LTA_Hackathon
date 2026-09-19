@@ -47,7 +47,7 @@ describe("v3/BusArrival provider contract", () => {
     globalThis.fetch = async () => Response.json({
       BusStopCode: "75009",
       Services: [
-        { ServiceNo: "31", NextBus: { EstimatedArrival: "2026-09-19T00:03:00.000Z", Load: "SEA" } },
+        { ServiceNo: "31", NextBus: { EstimatedArrival: "2026-09-19T00:03:00.000Z", Load: "SEA", Feature: "WAB" } },
         { ServiceNo: "15", NextBus: { EstimatedArrival: "2026-09-19T00:10:00.000Z", Load: "LSD" } },
       ],
     });
@@ -57,6 +57,7 @@ describe("v3/BusArrival provider contract", () => {
     if (stop?.status !== "fulfilled") throw new Error("expected fulfilled result");
     assert.equal(stop.value.data.get("31")?.estimatedArrival, "2026-09-19T00:03:00.000Z");
     assert.equal(stop.value.data.get("31")?.load, "SEA");
+    assert.equal(stop.value.data.get("31")?.wheelchairAccessible, true);
     assert.equal(stop.value.data.get("15")?.load, "LSD");
   });
 

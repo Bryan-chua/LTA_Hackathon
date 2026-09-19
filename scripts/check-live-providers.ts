@@ -3,6 +3,9 @@ import { crowdingForLine, trainServiceConditions } from "../lib/live/datamall";
 import { GoogleRoutesProvider } from "../lib/live/google-routes";
 import { geocodeOneMap } from "../lib/live/onemap";
 import { weatherConditions } from "../lib/live/weather";
+import { busArrivalsForStops } from "../lib/live/bus-arrival";
+import { facilityMaintenanceConditions, floodAlertConditions, trafficIncidentConditions } from "../lib/live/lta-conditions";
+import { trainTripUpdateConditions } from "../lib/live/gtfs-train";
 
 const checkRoutine: Routine = {
   id: "provider-check",
@@ -54,14 +57,36 @@ async function main() {
     trainServiceConditions(),
     crowdingForLine("EWL", "realtime"),
     weatherConditions([weatherJourney]),
+    busArrivalsForStops(["75009"]),
+    trainTripUpdateConditions(),
+    trafficIncidentConditions(),
+    floodAlertConditions(),
+    facilityMaintenanceConditions(),
   ]);
-  const names = ["Google Maps routing", "OneMap geocoding", "LTA train alerts", "LTA EWL crowding", "data.gov.sg weather"];
+  const names = [
+    "Google Maps routing",
+    "OneMap geocoding",
+    "LTA train alerts",
+    "LTA EWL crowding",
+    "data.gov.sg forecast + rainfall",
+    "LTA BusArrival",
+    "LTA GTFS train trip updates",
+    "LTA traffic incidents",
+    "LTA flood alerts",
+    "LTA lift maintenance",
+  ];
   let failed = false;
 
   checks.forEach((result, index) => {
     if (result.status === "fulfilled") {
       const value = result.value;
-      const count = Array.isArray(value) ? value.length : value.data instanceof Map ? value.data.size : value.data.length;
+      const count = Array.isArray(value)
+        ? value.length
+        : value instanceof Map
+          ? value.size
+          : value.data instanceof Map
+            ? value.data.size
+            : value.data.length;
       console.log(`OK ${names[index]} (${count} record${count === 1 ? "" : "s"})`);
       return;
     }

@@ -17,6 +17,7 @@ const accountKey = () => {
 const nextBusSchema = z.object({
   EstimatedArrival: z.string().optional().default(""),
   Load: z.string().optional().default(""),
+  Feature: z.string().optional().default(""),
 }).passthrough();
 
 const serviceSchema = z.object({
@@ -37,6 +38,7 @@ export interface ServiceNextBus {
   /** ISO datetime as reported by the provider, or undefined if no bus is currently reported. */
   estimatedArrival?: string;
   load?: BusLoadCode;
+  wheelchairAccessible?: boolean;
 }
 
 interface StopArrivalCache {
@@ -74,6 +76,7 @@ async function fetchStopArrivals(stopCode: string, now: Date): Promise<ProviderR
       serviceNo: service.ServiceNo,
       estimatedArrival: service.NextBus?.EstimatedArrival || undefined,
       load: service.NextBus?.Load ? asLoad(service.NextBus.Load) : undefined,
+      wheelchairAccessible: service.NextBus?.Feature === "WAB" ? true : undefined,
     },
   ]));
   const result: ProviderResult<Map<string, ServiceNextBus>> = {

@@ -13,8 +13,10 @@ Browser/PWA
 Next.js route handlers on Google Cloud Run
   | Google Maps Routes transit routing
   | OneMap Singapore geocoding
-  | LTA DataMall alerts/crowding
-  | data.gov.sg weather
+  | LTA DataMall alerts/crowding/bus arrivals
+  | LTA GTFS train trip updates
+  | LTA traffic incidents/floods/lift maintenance
+  | data.gov.sg forecast + rainfall observations
   | deterministic affected-leg matching + scoring
         |
         v
@@ -33,7 +35,7 @@ Web Push service -> installed browser notification
 1. The app opens a cached normalized snapshot, if present.
 2. When online it sends the device routine to `POST /api/morning-check`.
 3. The server requests provider data concurrently and normalizes provenance, validity, unknown values, and warnings.
-4. The engine intersects events with leg time windows and station/line geometry, scores feasible routes, and returns one deterministic recommendation plus alternatives.
+4. The engine intersects line/station and spatial events with each leg's travel mode, geometry and traversal window. Only conditions affecting a candidate journey are retained; they adjust uncertainty and route scoring before one deterministic recommendation and its alternatives are returned.
 5. A valid response replaces the displayed cache and is retained for seven days. A failed live request never silently becomes fixture data.
 
 ## Notification journey

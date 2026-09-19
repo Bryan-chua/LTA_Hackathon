@@ -46,6 +46,7 @@ export interface BusArrivalInfo {
   alightingStopCode?: string;
   etaMinutes?: number;
   load?: BusLoadCode;
+  wheelchairAccessible?: boolean;
   observedAt?: string;
   staleAt?: string;
   reason?: string;
@@ -93,11 +94,15 @@ export interface Journey {
 
 export interface TravelCondition {
   id: string;
-  kind: "train_disruption" | "crowding" | "weather" | "road_incident" | "planned_work";
+  kind: "train_disruption" | "crowding" | "weather" | "road_incident" | "planned_work" | "flood" | "facility_maintenance";
   severity: "info" | "minor" | "major";
   title: string;
   lineIds?: string[];
   stationCodes?: string[];
+  modes?: Mode[];
+  coordinate?: Coordinate;
+  radiusMeters?: number;
+  expectedDelayMinutes?: number;
   validFrom: string;
   validTo?: string;
   source: string;

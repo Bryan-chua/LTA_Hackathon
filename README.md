@@ -1,5 +1,5 @@
 # Smart Commuter Companion
-Smart Commuter Companion is a mobile-first PWA with replay and live modes. The live path uses Google Maps Routes for public-transport candidates, OneMap for Singapore address search, LTA DataMall for train conditions and crowding, and data.gov.sg for weather. It can run scheduled morning checks and deliver opt-in Web Push while keeping the editable routine authoritative on the device.
+Smart Commuter Companion is a mobile-first PWA with replay and live modes. The live path uses Google Maps Routes for public-transport candidates, OneMap for Singapore address search, LTA DataMall and GTFS-Realtime for transit conditions, crowding, and bus arrivals, and data.gov.sg for weather forecasts and rainfall observations. It can run scheduled morning checks and deliver opt-in Web Push while keeping the editable routine authoritative on the device.
 
 For the judging deployment, start with [the Google Cloud guide](docs/DEPLOYMENT_GOOGLE_CLOUD.md).
 
@@ -44,6 +44,11 @@ This checklist is the working delivery order. Update it as each slice is impleme
   - [x] Add OneMap geocoding and Google Maps public-transport routing.
   - [x] Add a schema-validated DataMall `TrainServiceAlerts` adapter.
   - [x] Add separate forecast/real-time crowding and weather adapters.
+  - [x] Enrich bus legs with `BusStops`, `BusRoutes` and `v3/BusArrival` ETA, load and WAB status.
+  - [x] Decode GTFS-Realtime train trip updates for material delays, cancellations and skipped stops.
+  - [x] Match traffic incidents and flood alerts spatially to bus, cycle and walking legs.
+  - [x] Match MRT lift maintenance to rail stations for accessible-mode decisions.
+  - [x] Combine data.gov.sg two-hour forecasts with observed station rainfall.
   - [x] Store provenance, timestamps, validity and replay/live state consistently.
 - [x] **5. Routine and morning-check flow** — implemented; database migration and real-device push verification remain deployment work.
   - [x] Add an editable IndexedDB-owned routine.
@@ -252,13 +257,17 @@ flowchart LR
 | DataMall `TrainServiceAlerts` | Official structured disruption and mitigation feed | `Status`, `AffectedSegments` and separate `Message` arrays must be handled. Feed is often quiet, so use labelled replay data for judging. |
 | DataMall `PCDRealTime` | Current station crowd level | One line per request; refreshed about every 10 minutes; values are low/moderate/high/NA. |
 | DataMall `PCDForecast` | Proactive crowd forecast | 30-minute intervals, published daily. Keep distinct from real-time density. |
-| DataMall `v3/BusArrival` | Bus ETA, occupancy and vehicle details for bus alternatives | Load is per arriving bus (`SEA`, `SDA`, `LSD`), not a station crowd signal. Guide lists a 20-second update frequency. |
+| DataMall `v3/BusArrival` | Bus ETA, occupancy and vehicle details for bus alternatives | Load is per arriving bus (`SEA`, `SDA`, `LSD`), not a station crowd signal. `Feature=WAB` is shown as a positive accessibility signal; a blank value remains unverified. Guide lists a 20-second update frequency. |
 | DataMall network reference APIs | Bus services, routes and stops | Cache reference data. Most DataMall responses are capped at 500 records and use `$skip` pagination. |
-| DataMall `TrafficIncidents`, `TrafficSpeedBands`, `RoadWorks`, `RoadOpenings` | Penalise disrupted bus/road legs and represent planned events | Normalise point/segment/time validity before matching to journey legs. |
+| DataMall `TrafficIncidents` | Penalise nearby bus/cycle legs affected by live accidents, road blocks, diversions and similar events | Spatially matched with a conservative 500 m route buffer; unrelated island-wide incidents are discarded. |
+| DataMall `PubFloodAlerts` | Avoid walking, cycling and bus legs near an active flood alert | The CAP-style circle is used only for proximity matching and is explicitly not treated as the measured flood extent. |
+| DataMall `v2/FacilitiesMaintenance` | Report lift outages at affected MRT stations | Used by accessible mode; the app still does not certify a complete route as step-free. |
+| DataMall GTFS-Realtime Train Trip Updates | Material train delays, cancellations and skipped stops | Official protobuf feed; delays under two minutes remain quiet. Empty feeds are valid and distinct from provider failure. |
+| DataMall `TrafficSpeedBands`, `RoadWorks`, `RoadOpenings` | Potential later road reliability/planned-event inputs | Not connected: speed bands require a large island-wide paginated join, while road works/openings lack coordinates needed for safe automatic route matching. |
 | DataMall `PlannedBusRoutes` | Future bus route changes | Useful for the planned-event half of the brief. |
 | DataMall `PV/Train`, `PV/ODTrain`, `PV/Bus`, `PV/ODBus` | Historical baseline and later routine/crowding features | Monthly batch data; not a live signal. |
 | DataMall geospatial layers | `CoveredLinkWay`, `Footpath`, `CyclingPath`, `TrainStationExit`, `BusStopLocation` | Authoritative overlays can improve the OSM base. Cache and version them. |
-| data.gov.sg weather | Rain and severe-weather penalties for walking | 24-hour and 4-day OpenAPI documents are supplied. Add 2-hour nowcast/rainfall for near-departure decisions. Optional API key provides higher limits. |
+| data.gov.sg weather | Rain and severe-weather penalties for walking | Connected to both the two-hour area forecast and five-minute station rainfall observations. The supplied 24-hour/4-day specifications remain useful for future-day notification planning. |
 | Provided rail-station GeoJSON | Station footprint overlay or spatial matching reference | Contains 208 polygon features. `TYPE` is coarse, not a canonical line mapping. The file declares no CRS; coordinate values look like longitude/latitude, but validate against known stations before joining. |
 
 ### Data integration rules
@@ -334,12 +343,15 @@ The detector operates on the ordered legs of the current journey, not on the who
 ```ts
 interface TravelCondition {
   id: string;
-  kind: "train_disruption" | "crowding" | "weather" | "road_incident" | "planned_work";
+  kind: "train_disruption" | "crowding" | "weather" | "road_incident" |
+    "planned_work" | "flood" | "facility_maintenance";
   severity: "info" | "minor" | "major";
   lineIds?: string[];
   stationCodes?: string[];
-  stopCodes?: string[];
-  area?: GeoJSON.Geometry;
+  modes?: ("walk" | "rail" | "bus" | "cycle")[];
+  coordinate?: { lat: number; lng: number };
+  radiusMeters?: number;
+  expectedDelayMinutes?: number;
   validFrom: string;
   validTo?: string;
   source: string;

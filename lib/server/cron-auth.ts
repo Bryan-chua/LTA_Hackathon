@@ -31,7 +31,7 @@ export async function isCronRequestAuthorized(request: Request): Promise<boolean
   try {
     const ticket = await oidcClient.verifyIdToken({ idToken: token, audience: audiences });
     const payload = ticket.getPayload();
-    return payload?.email === expectedEmail && payload.email_verified !== false;
+    return payload?.email?.toLowerCase() === expectedEmail.toLowerCase() && payload.email_verified !== false;
   } catch {
     return false;
   }

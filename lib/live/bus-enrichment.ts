@@ -108,6 +108,7 @@ export async function enrichBusLegs(
         alightingStopCode: match.alightingStopCode,
         etaMinutes,
         load: service.load,
+        wheelchairAccessible: service.wheelchairAccessible,
         observedAt: stopResult.value.metadata.fetchedAt,
         staleAt: stopResult.value.metadata.staleAt,
         provider: stopResult.value.metadata,

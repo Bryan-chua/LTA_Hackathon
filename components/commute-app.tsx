@@ -107,6 +107,8 @@ function Header({ scenario, travelMode, onMode, onTravelMode, onCompare, onProfi
   isLoading: boolean;
 }) {
   const accessible = travelMode === "accessible";
+  const primaryCondition = [...scenario.conditions].sort((left, right) =>
+    ({ info: 0, minor: 1, major: 2 })[right.severity] - ({ info: 0, minor: 1, major: 2 })[left.severity])[0];
   return (
     <>
       <header className="brand-header">
@@ -138,13 +140,13 @@ function Header({ scenario, travelMode, onMode, onTravelMode, onCompare, onProfi
       {accessible && (
         <div className="accessible-mode-banner" role="status">
           <Accessibility size={15} aria-hidden="true" />
-          <span>Accessible mode weights transfers and walking distance more heavily. Step-free access, lift status, and wheelchair-accessible buses are not verified for any route.</span>
+          <span>Accessible mode considers reported lift outages and wheelchair-accessible buses, and weights transfers and walking more heavily. Routes are not certified step-free.</span>
         </div>
       )}
-      {scenario.isReplay && scenario.conditions.length > 0 && (
+      {primaryCondition && (
         <button type="button" className="advisory" onClick={onCompare} aria-label="Review disruption impact and route alternatives">
           <AlertTriangle size={18} aria-hidden="true" />
-          <span className="advisory-copy"><strong>{scenario.conditions[0]?.title}</strong><span>Updated {scenario.updatedAt}</span></span>
+          <span className="advisory-copy"><strong>{primaryCondition.title}</strong><span>{scenario.isReplay ? "Replay" : "Live"} · Updated {scenario.updatedAt}</span></span>
           <ChevronRight size={18} aria-hidden="true" />
         </button>
       )}
@@ -273,6 +275,15 @@ function AccessibilityUnverifiedNote() {
   );
 }
 
+function BusAccessibilityNote({ accessible }: { accessible?: boolean }) {
+  if (!accessible) return <AccessibilityUnverifiedNote />;
+  return (
+    <small className="bus-arrival__accessibility">
+      <Accessibility size={12} aria-hidden="true" /> LTA reports this bus as wheelchair-accessible
+    </small>
+  );
+}
+
 function BusArrivalSummary({ arrival, accessibleMode }: { arrival: BusArrivalInfo; accessibleMode?: boolean }) {
   if (arrival.status !== "available") {
     return (
@@ -281,7 +292,7 @@ function BusArrivalSummary({ arrival, accessibleMode }: { arrival: BusArrivalInf
         <span>
           <strong>Bus {arrival.serviceNo ?? ""} arrival unavailable</strong>
           <small>{arrival.reason ?? "No current data from LTA DataMall."}</small>
-          {accessibleMode && <AccessibilityUnverifiedNote />}
+          {accessibleMode && <BusAccessibilityNote accessible={arrival.wheelchairAccessible} />}
         </span>
       </div>
     );
@@ -293,7 +304,7 @@ function BusArrivalSummary({ arrival, accessibleMode }: { arrival: BusArrivalInf
       <span>
         <strong>Bus {arrival.serviceNo} in {arrival.etaMinutes} min</strong>
         <small>Bus load: {arrival.load ? busLoadCopy[arrival.load] : "Unavailable"}{updated ? ` · Updated ${updated} SGT` : ""}</small>
-        {accessibleMode && <AccessibilityUnverifiedNote />}
+        {accessibleMode && <BusAccessibilityNote accessible={arrival.wheelchairAccessible} />}
       </span>
     </div>
   );
@@ -355,13 +366,13 @@ function RouteOption({ option, affected, accessibleMode, onUse }: { option: Alte
   );
 }
 
-function CompareScreen({ scenario, alternatives, travelMode, onUse }: { scenario: Scenario; alternatives: Alternative[]; travelMode: TravelMode; onUse: (journey: Journey) => void }) {
+function CompareScreen({ scenario, alternatives, affectedSegments, travelMode, onUse }: { scenario: Scenario; alternatives: Alternative[]; affectedSegments: AffectedSegment[]; travelMode: TravelMode; onUse: (journey: Journey) => void }) {
   const accessibleMode = travelMode === "accessible";
   return (
     <main id="main-content" className="screen">
       <section className="page-intro"><span>ROUTE COMPARISON</span><h1>Choose your best way in</h1><p>Compared against your 8:45 arrival deadline.</p></section>
       {alternatives.map((option) => (
-        <RouteOption key={option.id} option={option} affected={scenario.conditions.length > 0 && option.journey.id === scenario.usualJourney.id}
+        <RouteOption key={option.id} option={option} affected={affectedSegments.length > 0 && option.journey.id === scenario.usualJourney.id}
           accessibleMode={accessibleMode} onUse={onUse} />
       ))}
       <section className="comparison-note">
@@ -675,7 +686,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
       {decisionMessage && <div className="decision-banner" role="status"><Radio size={16} />{decisionMessage}</div>}
       <div className="live-region" aria-live="polite">{announcement}</div>
       {screen === "today" && <TodayScreen plan={plan} onCompare={showComparison} onUse={() => selectRoute()} />}
-      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} travelMode={travelMode} onUse={selectRoute} />}
+      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} affectedSegments={plan.affectedSegments} travelMode={travelMode} onUse={selectRoute} />}
       {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} persistence={persistence} travelMode={travelMode} />}
       {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
         busy={demandBusy || isScenarioLoading} online={online} message={demandMessage}

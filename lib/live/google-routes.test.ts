@@ -12,7 +12,6 @@ afterEach(() => {
   process.env.LIVE_PROVIDERS_ENABLED = originalLiveEnabled;
   process.env.GOOGLE_MAPS_ROUTES_API_KEY = originalApiKey;
 });
-
 const routine: Routine = {
   id: "google-test",
   travellerName: "Rachel",
@@ -87,4 +86,3 @@ describe("Google Routes provider", () => {
     assert.equal(journeys[0]?.legs[0]?.geometry.length, 3);
   });
 });
-

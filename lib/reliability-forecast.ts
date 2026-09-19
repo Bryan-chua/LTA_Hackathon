@@ -5,6 +5,7 @@ import type {
   ReliabilityReason,
   TravelCondition,
 } from "./domain";
+import { conditionsAffectingJourney } from "./condition-matching";
 
 export const SYNTHETIC_RELIABILITY_MODEL_VERSION = "synthetic-gbt-v1";
 export const RELIABILITY_FEATURE_SCHEMA_VERSION = "reliability-features-v1";
@@ -49,7 +50,9 @@ const transitLines = (journey: Journey) => new Set(
 
 const relevantConditions = (journey: Journey, conditions: TravelCondition[]) => {
   const lines = transitLines(journey);
+  const matched = new Set(conditionsAffectingJourney(journey, conditions).map((condition) => condition.id));
   return conditions.filter((condition) => {
+    if (condition.coordinate || condition.modes?.length || condition.stationCodes?.length) return matched.has(condition.id);
     if (condition.kind === "weather") return journey.legs.some((leg) => leg.mode === "walk");
     if (!condition.lineIds?.length) return true;
     return condition.lineIds.some((line) => lines.has(line.toUpperCase()));
