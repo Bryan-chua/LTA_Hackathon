@@ -251,7 +251,7 @@ export function RoutinePanel({ onPlan }: Props) {
         <button className="secondary-button" type="button" disabled={busy} onClick={persist}>Save routine</button>
         <button className="text-button" type="button" disabled={busy} onClick={restore}><RefreshCw size={15} />Reset to Rachel demo</button>
       </details>
-      <button className="primary-button" type="button" disabled={busy || !routine.enabled} onClick={runCheck}>
+      <button className="primary-button routine-check-button" type="button" disabled={busy || !routine.enabled} onClick={runCheck}>
         <RefreshCw size={18} />{busy ? "Checking…" : "Run live morning check"}
       </button>
       {subscribed && <button className="secondary-button" type="button" disabled={busy} onClick={sendTestPush}>

@@ -275,7 +275,7 @@ Singapore's transport network contains loops, bidirectional travel, circular ser
 
 Instead:
 
-1. Ask OneMap, GraphHopper or Valhalla for feasible route candidates.
+1. Ask OneMap, Google Routes, GraphHopper or Valhalla for feasible route candidates.
 2. Convert each response into a provider-neutral ordered list of journey legs.
 3. Treat one planned journey as an ordered, acyclic path for analysis.
 4. Detect the affected leg range.
@@ -294,7 +294,7 @@ interface Journey {
   departureAt: string;
   arrival: { p50: string; earliest: string; latest: string };
   legs: JourneyLeg[]; // ordered
-  source: "onemap" | "graphhopper" | "valhalla" | "fixture";
+  source: "onemap" | "google" | "graphhopper" | "valhalla" | "fixture";
   generatedAt: string;
 }
 
@@ -771,6 +771,8 @@ The first slice is complete when a developer can run one command, open the app o
 # Server-side only
 LTA_DATAMALL_ACCOUNT_KEY=
 ONEMAP_ACCESS_TOKEN=
+GOOGLE_MAPS_ROUTES_API_KEY=
+ROUTING_PROVIDER=onemap
 DATA_MODE=replay
 LIVE_PROVIDERS_ENABLED=false
 DATABASE_URL=
@@ -782,10 +784,12 @@ PUSH_ENABLED=false
 
 # Safe public configuration
 NEXT_PUBLIC_MAP_STYLE_URL=
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
+NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=
 NEXT_PUBLIC_APP_ENV=development
 ```
 
-Never place secret values in `NEXT_PUBLIC_*` variables. Replace `ONEMAP_ACCESS_TOKEN` when the current OneMap token expires.
+Never place secret values in `NEXT_PUBLIC_*` variables. Replace `ONEMAP_ACCESS_TOKEN` when the current OneMap token expires. To calculate live transit routes with Google, enable the Google Routes API, set `ROUTING_PROVIDER=google`, and store its restricted server-side key in `GOOGLE_MAPS_ROUTES_API_KEY`. To display Google Maps, create a separate browser key restricted to the Maps JavaScript API and the app's HTTP referrers, then set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` is optional; the Google demo map ID is used when it is blank.
 
 ## 24. Source material used
 

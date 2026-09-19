@@ -3,6 +3,8 @@ import { buildAlternatives, findAffectedSegments } from "../journey-engine";
 import { buildRecommendation } from "../application/journey-orchestrator";
 import type { JourneyPlanView, ProviderStateView } from "../application/journey-view-model";
 import { OneMapRoutingProvider } from "./onemap";
+import { GoogleRoutesRoutingProvider } from "./google-routes";
+import { ProviderError } from "../provider-contracts";
 import { crowdingForLine, trainServiceConditions } from "./datamall";
 import { weatherConditions } from "./weather";
 
@@ -52,7 +54,11 @@ async function enrichCrowding(journeys: Journey[], now: Date): Promise<{ journey
 }
 
 export async function planLiveJourney(routine: Routine, now = new Date()): Promise<JourneyPlanView> {
-  const routing = new OneMapRoutingProvider();
+  const routingProvider = process.env.ROUTING_PROVIDER?.trim().toLowerCase() ?? "onemap";
+  if (routingProvider !== "onemap" && routingProvider !== "google") {
+    throw new ProviderError("Routing", "configuration", "ROUTING_PROVIDER must be 'onemap' or 'google'.");
+  }
+  const routing = routingProvider === "google" ? new GoogleRoutesRoutingProvider() : new OneMapRoutingProvider();
   const journeys = await routing.plan(routine);
   const [alerts, weather] = await Promise.allSettled([trainServiceConditions(now), weatherConditions(journeys, now)]);
   const conditions: TravelCondition[] = [];

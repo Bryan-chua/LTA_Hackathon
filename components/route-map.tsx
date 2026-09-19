@@ -1,5 +1,8 @@
+/// <reference types="google.maps" />
+
 "use client";
 
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import {
   AttributionControl,
   LngLatBounds,
@@ -8,6 +11,7 @@ import {
   Marker,
   NavigationControl,
   type GeoJSONSource,
+  type StyleSpecification,
 } from "maplibre-gl";
 import type { Feature, FeatureCollection, LineString } from "geojson";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +23,36 @@ interface RouteMapProps {
   affectedSegments: AffectedSegment[];
   compact?: boolean;
 }
+
+interface GoogleRouteMapProps extends RouteMapProps {
+  apiKey: string;
+}
+
+let configuredGoogleMapsKey: string | undefined;
+
+const DEFAULT_MAP_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    openStreetMap: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [{ id: "open-street-map", type: "raster", source: "openStreetMap" }],
+};
+
+const configureGoogleMaps = (apiKey: string) => {
+  if (configuredGoogleMapsKey) return;
+  setOptions({ key: apiKey, v: "weekly" });
+  configuredGoogleMapsKey = apiKey;
+};
+
+const toGooglePath = (journey: Journey): google.maps.LatLngLiteral[] =>
+  journey.legs.flatMap((leg, index) =>
+    leg.geometry.slice(index === 0 ? 0 : 1).map(({ lng, lat }) => ({ lng, lat })),
+  );
 
 const toFeature = (journey: Journey): Feature<LineString> => ({
   type: "Feature",
@@ -60,7 +94,102 @@ const toAffectedFeatureCollection = (
   ),
 });
 
-export function RouteMap({ usual, recommended, affectedSegments, compact = false }: RouteMapProps) {
+function GoogleRouteMap({ apiKey, usual, recommended, affectedSegments, compact = false }: GoogleRouteMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const isDisrupted = affectedSegments.length > 0;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    let disposed = false;
+    const overlays: Array<google.maps.Polyline | google.maps.marker.AdvancedMarkerElement> = [];
+
+    const initialise = async () => {
+      configureGoogleMaps(apiKey);
+      const [{ Map, Polyline }, { AdvancedMarkerElement }] = await Promise.all([
+        importLibrary("maps"),
+        importLibrary("marker"),
+      ]);
+      if (disposed || !containerRef.current) return;
+
+      const map = new Map(containerRef.current, {
+        center: { lat: 1.317, lng: 103.897 },
+        zoom: 11,
+        mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID",
+        disableDefaultUI: compact,
+        zoomControl: !compact,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        clickableIcons: !compact,
+        gestureHandling: compact ? "none" : "cooperative",
+      });
+
+      const addLine = (path: google.maps.LatLngLiteral[], color: string, width: number, opacity = 1) => {
+        const line = new Polyline({ path, map, strokeColor: color, strokeWeight: width, strokeOpacity: opacity });
+        overlays.push(line);
+      };
+
+      addLine(toGooglePath(usual), "#254a91", compact ? 5 : 6, recommended ? 0.52 : 1);
+
+      const affectedGeometry = toAffectedFeatureCollection(usual, affectedSegments);
+      affectedGeometry.features.forEach((feature) => {
+        addLine(
+          feature.geometry.coordinates.map(([lng, lat]) => ({ lng, lat })),
+          "#cb3b46",
+          compact ? 7 : 8,
+        );
+      });
+
+      if (recommended) addLine(toGooglePath(recommended), "#008b95", compact ? 6 : 7);
+
+      [usual.origin, usual.destination].forEach((point, index) => {
+        const marker = document.createElement("div");
+        marker.className = `map-marker google-map-marker map-marker--${index === 0 ? "start" : "end"}`;
+        marker.setAttribute("aria-label", index === 0 ? "Journey start" : "Journey destination");
+        overlays.push(new AdvancedMarkerElement({
+          map,
+          position: point.coordinate,
+          content: marker,
+          title: index === 0 ? "Journey start" : "Journey destination",
+        }));
+      });
+
+      const coordinates = [
+        ...toGooglePath(usual),
+        ...(recommended ? toGooglePath(recommended) : []),
+      ];
+      const bounds = new google.maps.LatLngBounds();
+      coordinates.forEach((coordinate) => bounds.extend(coordinate));
+      map.fitBounds(bounds, compact ? 28 : 48);
+      setMapReady(true);
+    };
+
+    void initialise().catch(() => setMapReady(false));
+
+    return () => {
+      disposed = true;
+      overlays.forEach((overlay) => {
+        if (overlay instanceof google.maps.Polyline) overlay.setMap(null);
+        else overlay.map = null;
+      });
+    };
+  }, [apiKey, usual, recommended, affectedSegments, compact]);
+
+  return (
+    <MapFrame
+      compact={compact}
+      containerRef={containerRef}
+      mapReady={mapReady}
+      usual={usual}
+      recommended={recommended}
+      isDisrupted={isDisrupted}
+    />
+  );
+}
+
+function MapLibreRouteMap({ usual, recommended, affectedSegments, compact = false }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -71,7 +200,7 @@ export function RouteMap({ usual, recommended, affectedSegments, compact = false
 
     const map = new MapLibreMap({
       container: containerRef.current,
-      style: process.env.NEXT_PUBLIC_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/bright",
+      style: process.env.NEXT_PUBLIC_MAP_STYLE_URL || DEFAULT_MAP_STYLE,
       center: [103.897, 1.317],
       zoom: 11.2,
       attributionControl: false,
@@ -80,6 +209,7 @@ export function RouteMap({ usual, recommended, affectedSegments, compact = false
 
     map.addControl(new AttributionControl({ compact: true }), "bottom-right");
     if (!compact) map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+    map.once("style.load", () => setMapReady(true));
 
     map.on("load", () => {
       map.addSource("usual-route", { type: "geojson", data: toFeature(usual) });
@@ -151,6 +281,26 @@ export function RouteMap({ usual, recommended, affectedSegments, compact = false
     usualSource?.setData(toFeature(usual));
   }, [usual]);
 
+  return <MapFrame
+    compact={compact}
+    containerRef={containerRef}
+    mapReady={mapReady}
+    usual={usual}
+    recommended={recommended}
+    isDisrupted={isDisrupted}
+  />;
+}
+
+interface MapFrameProps {
+  compact: boolean;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  mapReady: boolean;
+  usual: Journey;
+  recommended?: Journey;
+  isDisrupted: boolean;
+}
+
+function MapFrame({ compact, containerRef, mapReady, usual, recommended, isDisrupted }: MapFrameProps) {
   return (
     <div className={`map-shell ${compact ? "map-shell--compact" : ""}`}>
       <div className="map-fallback" aria-hidden="true">
@@ -180,4 +330,9 @@ export function RouteMap({ usual, recommended, affectedSegments, compact = false
       </div>
     </div>
   );
+}
+
+export function RouteMap(props: RouteMapProps) {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  return apiKey ? <GoogleRouteMap {...props} apiKey={apiKey} /> : <MapLibreRouteMap {...props} />;
 }

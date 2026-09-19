@@ -17,6 +17,7 @@
     "db:configure-cron": "tsx scripts/configure-supabase-cron.ts"
   },
   "dependencies": {
+    "@googlemaps/js-api-loader": "^2.1.1",
     "lucide-react": "latest",
     "maplibre-gl": "latest",
     "next": "16.3.5",
@@ -29,6 +30,8 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
+    "@types/geojson": "^7946.0.16",
+    "@types/google.maps": "^3.66.3",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",

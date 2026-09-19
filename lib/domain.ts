@@ -65,7 +65,7 @@ export interface Journey {
   departureAt: string;
   arrival: ArrivalRange;
   legs: JourneyLeg[];
-  source: "onemap" | "graphhopper" | "valhalla" | "fixture";
+  source: "onemap" | "google" | "graphhopper" | "valhalla" | "fixture";
   generatedAt: string;
   provider?: ProviderMetadata;
 }
