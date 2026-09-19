@@ -28,6 +28,8 @@ DATA_MODE=replay
 LIVE_PROVIDERS_ENABLED=true
 LTA_DATAMALL_ACCOUNT_KEY=
 ONEMAP_ACCESS_TOKEN=
+ONEMAP_EMAIL=
+ONEMAP_PASSWORD=
 DATABASE_URL=
 CRON_SECRET=
 VAPID_PUBLIC_KEY=
@@ -35,6 +37,8 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:team@example.com
 PUSH_ENABLED=true
 ```
+
+`ONEMAP_ACCESS_TOKEN` is an optional manual override. For deployed use, configure `ONEMAP_EMAIL` and `ONEMAP_PASSWORD` so the server can renew OneMap's short-lived token automatically.
 
 Generate VAPID keys with `npx web-push generate-vapid-keys`. Never use `NEXT_PUBLIC_` for private credentials.
 

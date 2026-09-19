@@ -1,6 +1,8 @@
 const canonicalLineAliases: Record<string, string> = {
   EW: "EWL",
   EWL: "EWL",
+  CGL: "EWL",
+  CG: "EWL",
   EASTWEST: "EWL",
   EASTWESTLINE: "EWL",
   NS: "NSL",
@@ -13,6 +15,8 @@ const canonicalLineAliases: Record<string, string> = {
   NORTHEASTLINE: "NEL",
   CC: "CCL",
   CCL: "CCL",
+  CEL: "CCL",
+  CE: "CCL",
   CIRCLE: "CCL",
   CIRCLELINE: "CCL",
   DT: "DTL",
@@ -24,10 +28,15 @@ const canonicalLineAliases: Record<string, string> = {
   THOMSONEASTCOAST: "TEL",
   THOMSONEASTCOASTLINE: "TEL",
   BP: "BPLRT",
+  BPL: "BPLRT",
   BPLRT: "BPLRT",
   SK: "SKLRT",
+  STL: "SKLRT",
+  SLRT: "SKLRT",
   SKLRT: "SKLRT",
   PG: "PGLRT",
+  PTL: "PGLRT",
+  PLRT: "PGLRT",
   PGLRT: "PGLRT",
 };
 

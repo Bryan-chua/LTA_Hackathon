@@ -13,6 +13,8 @@ DATA_MODE=live
 LIVE_PROVIDERS_ENABLED=true
 LTA_DATAMALL_ACCOUNT_KEY=...
 ONEMAP_ACCESS_TOKEN=...
+ONEMAP_EMAIL=...
+ONEMAP_PASSWORD=...
 DATABASE_URL=postgresql://...:6543/postgres
 CRON_SECRET=...
 VAPID_PUBLIC_KEY=...
@@ -21,6 +23,14 @@ VAPID_SUBJECT=mailto:team-contact@example.com
 PUSH_ENABLED=true
 PUSH_TEST_ENABLED=true
 NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/bright
+```
+
+For a long-running deployment, prefer `ONEMAP_EMAIL` and `ONEMAP_PASSWORD`; the server obtains and caches a token and renews it before expiry. `ONEMAP_ACCESS_TOKEN` is an optional manual override and must be replaced when it expires.
+
+Before deploying, verify all live sources without printing credentials:
+
+```bash
+npm run providers:check
 ```
 
 The app uses a module-scoped Postgres.js client with pool size one, prepared statements disabled, and SSL required, matching Supabase serverless guidance.

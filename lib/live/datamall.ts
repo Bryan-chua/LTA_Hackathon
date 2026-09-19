@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { CrowdingLevel, ProviderMode, TravelCondition } from "../domain";
 import { canonicalLineId } from "../canonical-transit";
 import { ProviderError, providerFetch, providerMetadata, type ProviderResult } from "../provider-contracts";
+import { assertLiveProvidersEnabled } from "./config";
 
 const BASE_URL = "https://datamall2.mytransport.sg/ltaodataservice";
 const segmentSchema = z.object({
@@ -41,6 +42,7 @@ const forecastEnvelope = z.object({
 }).passthrough();
 
 const accountKey = () => {
+  assertLiveProvidersEnabled();
   const key = process.env.LTA_DATAMALL_ACCOUNT_KEY;
   if (!key) throw new ProviderError("LTA DataMall", "configuration", "LTA DataMall credentials are not configured.");
   return key;
@@ -54,6 +56,16 @@ async function dataMall(path: string, query?: Record<string, string>): Promise<u
 }
 
 const splitCodes = (value: string) => value.split(/[,\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean);
+const crowdLineCode = (value: string) => {
+  const supplied = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const providerAliases: Record<string, string> = {
+    CG: "CGL", CGL: "CGL", CE: "CEL", CEL: "CEL",
+    BP: "BPL", BPL: "BPL", BPLRT: "BPL",
+    SK: "SLRT", STL: "SLRT", SLRT: "SLRT", SKLRT: "SLRT",
+    PG: "PLRT", PTL: "PLRT", PLRT: "PLRT", PGLRT: "PLRT",
+  };
+  return providerAliases[supplied] ?? canonicalLineId(value);
+};
 const createdDate = (value: string | undefined, fallback: string) => {
   if (!value) return fallback;
   const dotNet = /\/Date\((\d+)/.exec(value);
@@ -112,15 +124,15 @@ const singaporeMinutes = (value: Date | string) => {
 };
 
 export async function crowdingForLine(lineId: string, mode: "realtime" | "forecast", now = new Date()): Promise<ProviderResult<Map<string, CrowdingLevel>>> {
-  const canonical = canonicalLineId(lineId);
-  const cacheKey = `${mode}:${canonical}`;
+  const providerLine = crowdLineCode(lineId);
+  const cacheKey = `${mode}:${providerLine}`;
   const cached = crowdCache.get(cacheKey);
   if (cached && cached.expiresAt > now.getTime()) return {
     data: new Map(cached.value.data),
     metadata: { ...cached.value.metadata, mode: "cached", warnings: [...cached.value.metadata.warnings, "Reused within provider refresh window."] },
   };
   const path = mode === "realtime" ? "PCDRealTime" : "PCDForecast";
-  const payload = await dataMall(path, { TrainLine: canonical });
+  const payload = await dataMall(path, { TrainLine: providerLine });
   let map: Map<string, CrowdingLevel>;
   let validFrom: string | undefined;
   let validTo: string | undefined;
