@@ -7,8 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "tsx --test \"lib/**/*.test.ts\"",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "test": "npm run test:unit",
+    "test:unit": "tsx --test \"lib/**/*.test.ts\"",
+    "test:contracts": "tsx --test \"lib/live/*.test.ts\"",
+    "test:e2e": "playwright test",
+    "test:a11y": "playwright test -g accessibility",
+    "test:release": "npm run lint && npm run test:unit && npm run build && npm run test:e2e",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:configure-cron": "tsx scripts/configure-supabase-cron.ts"
   },
   "dependencies": {
     "lucide-react": "latest",
@@ -21,12 +27,15 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@types/web-push": "^3.6.4",
     "eslint": "latest",
     "eslint-config-next": "16.3.5",
+    "fake-indexeddb": "^6.2.5",
     "tsx": "latest",
     "typescript": "latest"
   }

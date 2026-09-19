@@ -1,4 +1,4 @@
-import webpush from "web-push";
+import { sendWebPush } from "./web-push";
 import { createHash } from "node:crypto";
 import type { Routine } from "../domain";
 import { planLiveJourney } from "../live/live-planner";
@@ -20,14 +20,6 @@ interface ClaimedProfile {
   weekdays: number[];
   material_delay_minutes: number;
   version_hash: string;
-}
-
-function vapid() {
-  const subject = process.env.VAPID_SUBJECT;
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!subject || !publicKey || !privateKey) throw new Error("VAPID configuration is incomplete.");
-  webpush.setVapidDetails(subject, publicKey, privateKey);
 }
 
 async function claimDueProfiles(limit = 20): Promise<ClaimedProfile[]> {
@@ -97,10 +89,11 @@ async function processProfile(profile: ClaimedProfile) {
     if (inserted.length > 0 && ["action_required", "recovery"].includes(decision.result)) {
       const targetUrl = `/?decision=${inserted[0].public_id}`;
       try {
-        await webpush.sendNotification({
+        await sendWebPush({
           endpoint: profile.push_endpoint,
-          keys: { p256dh: profile.push_p256dh, auth: profile.push_auth },
-        }, JSON.stringify({ title: decision.title, body: decision.body, url: targetUrl, decisionId: inserted[0].public_id }), { TTL: 900 });
+          p256dh: profile.push_p256dh,
+          auth: profile.push_auth,
+        }, { title: decision.title, body: decision.body, url: targetUrl, decisionId: inserted[0].public_id });
         await sql`update notification_decisions set sent_at = now(), target_url = ${targetUrl} where id = ${inserted[0].id}`;
       } catch (error) {
         const status = typeof error === "object" && error && "statusCode" in error ? Number(error.statusCode) : 0;
@@ -138,7 +131,6 @@ async function processProfile(profile: ClaimedProfile) {
 }
 
 export async function runMorningChecks() {
-  vapid();
   const profiles = await claimDueProfiles();
   const totals = { claimed: profiles.length, sent: 0, removed: 0, failed: 0 };
   for (const profile of profiles) {

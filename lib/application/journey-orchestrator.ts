@@ -141,7 +141,7 @@ export class JourneyOrchestrator {
   }
 
   private getScenario(scenarioId: string): Scenario {
-    if (scenarioId === "normal" || scenarioId === "ewl-disruption") {
+    if (scenarioId === "normal" || scenarioId === "ewl-disruption" || scenarioId === "ewl-planned-work") {
       return scenarios[scenarioId];
     }
     throw new ScenarioNotFoundError(scenarioId);

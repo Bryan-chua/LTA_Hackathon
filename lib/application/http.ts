@@ -3,7 +3,7 @@ import { JourneyNotFoundError, ScenarioNotFoundError } from "./journey-orchestra
 import type { Scenario } from "../domain";
 
 export function isScenarioId(value: unknown): value is Scenario["id"] {
-  return value === "normal" || value === "ewl-disruption";
+  return value === "normal" || value === "ewl-disruption" || value === "ewl-planned-work";
 }
 
 export function apiError(error: unknown): Response {

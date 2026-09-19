@@ -1,10 +1,12 @@
 "use client";
 
-import { Bell, BellOff, MapPin, RefreshCw, Search } from "lucide-react";
+import { Bell, BellOff, MapPin, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { JourneyPlanView } from "@/lib/application/journey-view-model";
 import type { Place, Routine } from "@/lib/domain";
 import { defaultRoutine, loadRoutine, resetRoutine, saveRoutine } from "@/lib/client/routine-store";
+import { clearDeviceDatabase } from "@/lib/client/device-database";
+import { hasPendingServerDeletion, setPendingServerDeletion } from "@/lib/client/journey-store";
 
 interface GeocodeResult { name: string; address: string; coordinate: Place["coordinate"] }
 interface Props { onPlan: (plan: JourneyPlanView) => void }
@@ -56,6 +58,10 @@ export function RoutinePanel({ onPlan }: Props) {
   useEffect(() => {
     let active = true;
     const reconcile = async () => {
+      if (navigator.onLine && await hasPendingServerDeletion()) {
+        const response = await fetch("/api/push/subscription", { method: "DELETE" });
+        if (response.ok) await setPendingServerDeletion(false);
+      }
       const saved = await loadRoutine();
       if (active) setRoutine(saved);
       if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
@@ -173,6 +179,41 @@ export function RoutinePanel({ onPlan }: Props) {
     finally { setBusy(false); }
   };
 
+  const sendTestPush = async () => {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/push/test", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message ?? "Test notification failed.");
+      setMessage("Test notification sent. Delivery can take a few seconds.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Test notification failed."); }
+    finally { setBusy(false); }
+  };
+
+  const clearMyData = async () => {
+    if (!window.confirm("Clear this routine, saved journeys, and commute alerts from this device?")) return;
+    setBusy(true);
+    try {
+      localStorage.removeItem(PUSH_OPT_IN_KEY);
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        await (await registration.pushManager.getSubscription())?.unsubscribe();
+      }
+      let serverDeleted = false;
+      if (navigator.onLine) {
+        const response = await fetch("/api/push/subscription", { method: "DELETE" });
+        serverDeleted = response.ok;
+      }
+      await clearDeviceDatabase();
+      if (!serverDeleted) await setPendingServerDeletion(true);
+      setMessage(serverDeleted
+        ? "Routine, journeys, and notification data were deleted."
+        : "Device data cleared. Server deletion will retry after reconnection.");
+      window.location.reload();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Data could not be completely cleared."); }
+    finally { setBusy(false); }
+  };
+
   const restore = async () => {
     const value = await resetRoutine();
     setRoutine(value);
@@ -212,6 +253,12 @@ export function RoutinePanel({ onPlan }: Props) {
       </details>
       <button className="primary-button" type="button" disabled={busy || !routine.enabled} onClick={runCheck}>
         <RefreshCw size={18} />{busy ? "Checking…" : "Run live morning check"}
+      </button>
+      {subscribed && <button className="secondary-button" type="button" disabled={busy} onClick={sendTestPush}>
+        <Send size={18} />Send test notification
+      </button>}
+      <button className="text-button danger-button" type="button" disabled={busy} onClick={clearMyData}>
+        <Trash2 size={16} />Clear my data
       </button>
       <button className="secondary-button" type="button" disabled={busy} onClick={subscribed ? disableAlerts : enableAlerts}>
         {subscribed ? <BellOff size={18} /> : <Bell size={18} />}{subscribed ? "Disable commute alerts" : "Enable commute alerts"}

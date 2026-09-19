@@ -23,12 +23,21 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AffectedSegment, Alternative, CrowdingLevel, Journey, Scenario } from "@/lib/domain";
-import { requestJourneyPlan, requestParticipation } from "@/lib/application/journey-api-client";
+import { requestJourneyPlan, requestMorningCheck, requestParticipation } from "@/lib/application/journey-api-client";
 import type { JourneyPlanView } from "@/lib/application/journey-view-model";
 import { RouteMap } from "./route-map";
 import { DemandPanel } from "./demand-panel";
 import type { DemandProfile } from "@/lib/demand-flow";
 import { RoutinePanel } from "./routine-panel";
+import { loadRoutine } from "@/lib/client/routine-store";
+import {
+  consumeLegacyActiveJourney,
+  type CachedJourneySnapshot,
+  loadLatestJourneySnapshot,
+  saveJourneySnapshot,
+  snapshotFreshness,
+  updateSelectedJourney,
+} from "@/lib/client/journey-store";
 
 type Screen = "today" | "compare" | "journey";
 
@@ -60,7 +69,11 @@ function GovernmentBanner() {
   );
 }
 
-function Header({ scenario, onToggle, isLoading }: { scenario: Scenario; onToggle: () => void; isLoading: boolean }) {
+function Header({ scenario, onMode, isLoading }: {
+  scenario: Scenario;
+  onMode: (mode: "live" | Scenario["id"]) => void;
+  isLoading: boolean;
+}) {
   return (
     <>
       <header className="brand-header">
@@ -69,17 +82,25 @@ function Header({ scenario, onToggle, isLoading }: { scenario: Scenario; onToggl
           <div><strong>Smart Commute</strong><small>Hackathon concept</small></div>
         </div>
         <div className="header-actions">
-          <button className="scenario-button" onClick={onToggle} aria-label="Change demo scenario" disabled={isLoading}>
-            <RefreshCw size={15} />
-            <span>{isLoading ? "Loading" : scenario.id === "normal" ? "Show replay" : "Show normal"}</span>
+          <label className="scenario-picker">
+            <span className="sr-only">Data scenario</span>
+            <select aria-label="Data scenario" value={scenario.id} disabled={isLoading}
+              onChange={(event) => onMode(event.target.value as Scenario["id"])}>
+              <option value="normal">Normal replay</option>
+              <option value="ewl-disruption">Unplanned disruption</option>
+              <option value="ewl-planned-work">Planned work</option>
+            </select>
+          </label>
+          <button className="scenario-button" onClick={() => onMode("live")} disabled={isLoading} aria-label="Run live morning check">
+            <RefreshCw size={15} /><span>{isLoading ? "Loading" : "Live check"}</span>
           </button>
           <button className="avatar" aria-label="Open Rachel's profile">R</button>
         </div>
       </header>
-      {scenario.isReplay && (
+      {scenario.isReplay && scenario.conditions.length > 0 && (
         <div className="advisory" role="status">
           <AlertTriangle size={18} aria-hidden="true" />
-          <div><strong>EWL service disruption affects your journey</strong><span>Updated {scenario.updatedAt}</span></div>
+          <div><strong>{scenario.conditions[0]?.title}</strong><span>Updated {scenario.updatedAt}</span></div>
           <ChevronRight size={18} aria-hidden="true" />
         </div>
       )}
@@ -218,7 +239,12 @@ function StepIcon({ mode }: { mode: Journey["legs"][number]["mode"] }) {
   return <TrainFront size={18} />;
 }
 
-function JourneyScreen({ scenario, activeJourney, affectedSegments }: { scenario: Scenario; activeJourney: Journey; affectedSegments: AffectedSegment[] }) {
+function JourneyScreen({ scenario, activeJourney, affectedSegments, persistence }: {
+  scenario: Scenario;
+  activeJourney: Journey;
+  affectedSegments: AffectedSegment[];
+  persistence: "saving" | "saved" | "unavailable";
+}) {
   const firstLeg = activeJourney.legs[0];
   const firstTransit = activeJourney.legs.find((leg) => leg.mode === "rail" || leg.mode === "bus");
   return (
@@ -235,7 +261,10 @@ function JourneyScreen({ scenario, activeJourney, affectedSegments }: { scenario
         <small>Demo journey · progress is illustrative</small>
       </section>
       <RouteMap usual={scenario.usualJourney} recommended={activeJourney.id !== scenario.usualJourney.id ? activeJourney : undefined} affectedSegments={affectedSegments} />
-      <div className="offline-note"><CloudOff size={17} /><span><strong>Available offline</strong>Journey saved on this device · Updated {scenario.updatedAt}</span></div>
+      <div className="offline-note"><CloudOff size={17} /><span>
+        <strong>{persistence === "saved" ? "Available offline" : persistence === "saving" ? "Saving for offline use" : "Not saved offline"}</strong>
+        {persistence === "saved" ? `Journey saved on this device · Updated ${scenario.updatedAt}` : "Keep this page open and try again when storage is available."}
+      </span></div>
       <section className="timeline-section">
         <div className="section-heading"><div><span>YOUR JOURNEY</span><h2>{activeJourney.origin.shortName} to {activeJourney.destination.shortName}</h2></div></div>
         <ol className="timeline">
@@ -259,13 +288,44 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
   const [activeJourneyId, setActiveJourneyId] = useState<string>();
   const [announcement, setAnnouncement] = useState("");
   const [online, setOnline] = useState(true);
+  const [booting, setBooting] = useState(true);
+  const [cached, setCached] = useState(false);
+  const [freshness, setFreshness] = useState<"fresh" | "stale" | "expired">("fresh");
+  const [persistence, setPersistence] = useState<"saving" | "saved" | "unavailable">("unavailable");
+  const [storedSnapshot, setStoredSnapshot] = useState<CachedJourneySnapshot>();
   const [isScenarioLoading, setIsScenarioLoading] = useState(false);
   const [serviceError, setServiceError] = useState<string>();
   const [participating, setParticipating] = useState(false);
   const [demandMessage, setDemandMessage] = useState("");
   const [decisionMessage, setDecisionMessage] = useState<string>();
   const [demandBusy, setDemandBusy] = useState(false);
-  const [activeSnapshot, setActiveSnapshot] = useState<Journey>();
+  const [acceptedJourney, setAcceptedJourney] = useState<Journey>();
+
+  const persistPlan = async (nextPlan: JourneyPlanView, selectedJourneyId?: string) => {
+    setPersistence("saving");
+    try {
+      const snapshot = await saveJourneySnapshot(nextPlan, selectedJourneyId);
+      setStoredSnapshot(snapshot);
+      setFreshness(snapshotFreshness(snapshot));
+      setPersistence("saved");
+    } catch {
+      setPersistence("unavailable");
+    }
+  };
+
+  const loadLive = async (announce = true) => {
+    if (!navigator.onLine) throw new Error("You are offline. Showing the saved journey.");
+    const routine = await loadRoutine();
+    const nextPlan = await requestMorningCheck(routine);
+    const changed = plan.recommendation.journeyId !== nextPlan.recommendation.journeyId;
+    setPlan(nextPlan);
+    setCached(false);
+    await persistPlan(nextPlan, activeJourneyId);
+    if (announce) setAnnouncement(changed && activeJourneyId
+      ? "Live advice changed. Your accepted route remains selected until you choose another."
+      : "Live morning check complete.");
+    return nextPlan;
+  };
 
   useEffect(() => {
     if (!initialPlan.demand) return;
@@ -298,40 +358,69 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
 
 
   useEffect(() => {
-    const restoreSavedJourney = () => {
-      const stored = window.localStorage.getItem("smart-commute-active-journey");
-      if (stored) setActiveJourneyId(stored);
+    let cancelled = false;
+    const initialize = async () => {
+      setOnline(navigator.onLine);
+      const snapshot = await Promise.race([
+        loadLatestJourneySnapshot().catch(() => undefined),
+        new Promise<undefined>((resolve) => window.setTimeout(() => resolve(undefined), 1_500)),
+      ]);
+      if (cancelled) return;
+      setBooting(false);
+      const legacyId = consumeLegacyActiveJourney();
+      if (snapshot) {
+        setPlan(snapshot.plan);
+        setStoredSnapshot(snapshot);
+        setActiveJourneyId(snapshot.selectedJourneyId ?? legacyId);
+        setCached(true);
+        setFreshness(snapshotFreshness(snapshot));
+        setPersistence("saved");
+      } else if (legacyId) setActiveJourneyId(legacyId);
+      if (navigator.onLine) {
+        try { await loadLive(false); }
+        catch { if (!cancelled) setServiceError("Unable to refresh live data. Showing the last verified view."); }
+      }
     };
-    const updateOnline = () => setOnline(navigator.onLine);
-    const initialization = window.setTimeout(() => {
-      restoreSavedJourney();
-      updateOnline();
-    }, 0);
+    let reconnectTimer: number | undefined;
+    const updateOnline = () => {
+      const value = navigator.onLine;
+      setOnline(value);
+      if (value) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = window.setTimeout(() => {
+          void loadLive().catch(() => setServiceError("Reconnected, but live data could not be refreshed."));
+        }, 800);
+      }
+    };
+    void initialize();
     window.addEventListener("online", updateOnline);
     window.addEventListener("offline", updateOnline);
-    window.addEventListener("storage", restoreSavedJourney);
     return () => {
-      window.clearTimeout(initialization);
+      cancelled = true;
+      window.clearTimeout(reconnectTimer);
       window.removeEventListener("online", updateOnline);
       window.removeEventListener("offline", updateOnline);
-      window.removeEventListener("storage", restoreSavedJourney);
     };
+    // Startup runs once; reconnect refreshes use the latest routine from IndexedDB.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [screen]);
 
   const activeJourney = useMemo(() => {
-    if (activeSnapshot) return activeSnapshot;
+    if (acceptedJourney) return acceptedJourney;
     const candidates = plan.alternatives.map((option) => option.journey);
     return candidates.find((journey) => journey?.id === activeJourneyId) ?? scenario.recommendedJourney ?? scenario.usualJourney;
-  }, [activeJourneyId, activeSnapshot, scenario, plan.alternatives]);
+  }, [activeJourneyId, acceptedJourney, scenario, plan.alternatives]);
 
   const selectRoute = (choice?: Journey) => {
     if (demandBusy || isScenarioLoading) return;
     const selected = choice ?? plan.alternatives.find(({ journey }) => journey.id === plan.recommendation.journeyId)?.journey ?? scenario.usualJourney;
-    try { window.localStorage.setItem("smart-commute-active-journey", selected.id); } catch { /* Route remains usable in memory. */ }
-    setActiveSnapshot(selected);
+    setAcceptedJourney(selected);
     setActiveJourneyId(selected.id);
+    if (storedSnapshot) void updateSelectedJourney(storedSnapshot, selected.id).then(setStoredSnapshot)
+      .catch(() => setPersistence("unavailable"));
+    else void persistPlan(plan, selected.id);
     setAnnouncement(`${selected.name} selected. Your active route will not change automatically.`);
     setScreen("journey");
     if (participating && online && plan.demand && plan.demand.profile !== "unavailable") {
@@ -363,15 +452,16 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     finally { setDemandBusy(false); }
   };
 
-  const toggleScenario = async () => {
-    const nextScenarioId: Scenario["id"] = scenario.id === "normal" ? "ewl-disruption" : "normal";
+  const changeMode = async (mode: "live" | Scenario["id"]) => {
     setIsScenarioLoading(true);
     setServiceError(undefined);
     try {
-      const nextPlan = await requestJourneyPlan(nextScenarioId, plan.demand?.profile);
+      const nextPlan = mode === "live" ? await loadLive() : await requestJourneyPlan(mode, plan.demand?.profile);
       setPlan(nextPlan);
+      setCached(false);
+      if (mode !== "live") await persistPlan(nextPlan);
       setActiveJourneyId(undefined);
-      setActiveSnapshot(undefined);
+      setAcceptedJourney(undefined);
       setScreen("today");
       setAnnouncement(`${nextPlan.scenario.label} loaded.`);
     } catch (error) {
@@ -387,18 +477,26 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <GovernmentBanner />
-      <Header scenario={scenario} onToggle={toggleScenario} isLoading={isScenarioLoading || demandBusy} />
-      {!online && <div className="offline-banner" role="status"><CloudOff size={16} />Offline · showing your saved journey</div>}
+      <Header scenario={scenario} onMode={changeMode} isLoading={isScenarioLoading || demandBusy || booting} />
+      {booting && <div className="offline-banner" role="status"><RefreshCw size={16} />Loading saved journey...</div>}
+      {!online && <div className="offline-banner" role="status"><CloudOff size={16} />Offline · {storedSnapshot ? "showing your saved journey" : "no saved journey is available"}</div>}
+      {cached && <div className="decision-banner" role="status"><CloudOff size={16} />Cached device data · {freshness === "fresh" ? "within provider validity" : freshness}</div>}
       {serviceError && <div className="service-error" role="alert"><AlertTriangle size={16} />{serviceError}</div>}
       {decisionMessage && <div className="decision-banner" role="status"><Radio size={16} />{decisionMessage}</div>}
       <div className="live-region" aria-live="polite">{announcement}</div>
       {screen === "today" && <TodayScreen plan={plan} onCompare={() => setScreen("compare")} onUse={() => selectRoute()} />}
       {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} onUse={selectRoute} />}
-      {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} />}
+      {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} persistence={persistence} />}
       {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
         busy={demandBusy || isScenarioLoading} online={online} message={demandMessage}
         onRefresh={refreshDemand} onParticipation={updateParticipation} />}
-      {screen === "today" && <RoutinePanel onPlan={(nextPlan) => { setPlan(nextPlan); setActiveJourneyId(undefined); setAnnouncement("Live morning check complete."); }} />}
+      {screen === "today" && <RoutinePanel onPlan={(nextPlan) => {
+        setPlan(nextPlan);
+        setCached(false);
+        setActiveJourneyId(undefined);
+        void persistPlan(nextPlan);
+        setAnnouncement("Live morning check complete.");
+      }} />}
       <nav className="bottom-nav" aria-label="Primary navigation">
         {navItems.map(({ id, label, icon: Icon }) => (
           <button key={id} className={screen === id ? "active" : ""} onClick={() => setScreen(id)} aria-current={screen === id ? "page" : undefined}>

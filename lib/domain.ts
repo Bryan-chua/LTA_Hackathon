@@ -145,7 +145,7 @@ export interface AffectedSegment {
 }
 
 export interface Scenario {
-  id: "normal" | "ewl-disruption";
+  id: "normal" | "ewl-disruption" | "ewl-planned-work";
   label: string;
   isReplay: boolean;
   routine: Routine;

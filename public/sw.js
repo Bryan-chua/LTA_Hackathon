@@ -1,4 +1,4 @@
-const CACHE_NAME = "smart-commute-v2";
+const CACHE_NAME = "smart-commute-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -15,16 +15,23 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   // Forecasts and participation are time-sensitive/private; never cache or HTML-fallback APIs.
-  if (new URL(event.request.url).pathname.startsWith("/api/")) return;
-  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith("/api/") || event.request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request).catch(() => caches.match("/")));
+    return;
+  }
+  const isStaticAsset = url.pathname.startsWith("/_next/static/") ||
+    ["/manifest.webmanifest", "/icon.svg", "/icon-maskable.svg"].includes(url.pathname);
+  if (!isStaticAsset) return;
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
+    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+      if (response.ok) {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),
+        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));
+      }
+      return response;
+    })),
   );
 });
 self.addEventListener("push", (event) => {

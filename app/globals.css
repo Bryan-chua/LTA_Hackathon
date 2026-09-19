@@ -38,6 +38,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #76a4ff; outline-offs
 .brand-mark i, .brand-mark b { position: absolute; top: 8px; width: 13px; height: 13px; border: 4px solid white; border-radius: 50%; box-shadow: 0 0 0 3px var(--color-teal); background: white; }
 .brand-mark i { left: 1px; }.brand-mark b { right: 0; box-shadow: 0 0 0 3px var(--color-blue); }
 .scenario-button { min-height: 36px; padding: 0 8px; display: flex; gap: 5px; align-items: center; border: 1px solid var(--color-border); border-radius: 9px; background: white; color: var(--color-blue); font-size: 11px; font-weight: 700; cursor: pointer; }.scenario-button:disabled { cursor: wait; color: var(--color-text-muted); background: #f2f4f5; }
+.scenario-picker select { min-height: 36px; max-width: 138px; border: 1px solid var(--color-border); border-radius: 9px; background: white; color: var(--color-text); padding: 0 8px; font-size: 11px; font-weight: 700; }
+.danger-button { color: #9b1c1c; }
 .avatar { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--color-blue); color: white; font-weight: 700; cursor: pointer; }
 .advisory { display: flex; gap: 10px; align-items: center; min-height: 52px; padding: 9px 16px; background: var(--color-yellow); }
 .advisory > div { flex: 1; }.advisory strong, .advisory span { display: block; }.advisory strong { font-size: 13px; }.advisory span { margin-top: 2px; font-size: 11px; }
@@ -98,6 +100,13 @@ select:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
   .today-screen { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }.today-screen .greeting, .today-screen .replay-label, .today-screen .change-explainer, .today-screen > .secondary-button { grid-column: 1 / -1; }.today-screen .recommendation-card, .today-screen .section-block { margin-top: 0; align-self: start; }.recommendation-card h2 { font-size: 24px; }.route-summary { grid-template-columns: 1fr; gap: 8px; }.route-summary .summary-divider { display: none; }.route-summary > div { justify-content: flex-start; padding-left: 8px; }
 }
 
+@media (max-width: 430px) {
+  .brand-header { padding-left: 10px; padding-right: 10px; }
+  .brand-lockup small, .scenario-button span { display: none; }
+  .header-actions { gap: 4px; }
+  .scenario-picker select { max-width: 96px; padding: 0 4px; }
+  .avatar { width: 32px; height: 32px; }
+}
 @media (max-width: 370px) {
   .scenario-button span { display: none; }.recommendation-card { padding: 18px 16px; }.arrival-row { gap: 10px; }.arrival-row strong { font-size: 24px; }.deadline-state span { display: none; }.route-summary { padding-left: 3px; padding-right: 3px; }.route-summary > div { gap: 4px; }.route-summary svg { width: 16px; }
 }

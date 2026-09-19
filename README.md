@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. The app starts in a clearly labelled EWL disruption replay. Use **Show normal** in the header to see the quiet normal-day state.
+Open `http://localhost:3000`. The app hydrates a saved journey, then attempts a live check when online. Use the header selector for the clearly labelled normal, unplanned-disruption, and planned-work replay paths.
 
 ```bash
 npm test
@@ -66,14 +66,14 @@ This checklist is the working delivery order. Update it as each slice is impleme
   - [x] Implement `Run live morning check`.
   - [x] Trigger advice only when deadline or disruption thresholds are crossed.
   - [x] Add PostgreSQL fingerprinting, cooldown records, Vercel scheduling and Web Push.
-- [ ] **6. Proper offline persistence**
-  - [ ] Move active-journey storage from `localStorage` to IndexedDB.
-  - [ ] Cache relevant conditions and their timestamps.
-  - [ ] Test offline opening, stale-data messaging and reconnection.
-- [ ] **7. Submission-grade testing**
-  - [ ] Add end-to-end normal, disruption, rain, offline and provider-failure tests.
-  - [ ] Check accessibility and layout at 320, 360 and 390 px.
-  - [ ] Test on iOS Safari and Android Chrome.
+- [x] **6. Proper offline persistence**
+  - [x] Move active-journey storage from `localStorage` to IndexedDB.
+  - [x] Cache normalized journeys, conditions, provider provenance, and timestamps for seven days.
+  - [x] Add offline/stale messaging, reconnect refresh, and device-data clearing.
+- [x] **7. Submission-grade implementation** - physical-device sign-off remains a release gate.
+  - [x] Add local end-to-end normal, planned-event, offline-state, responsive, and accessibility tests.
+  - [x] Check automated layout at 320, 360 and 390 px.
+  - [ ] Complete the documented iOS Home Screen and Android Chrome physical-device checklist.
 
 > A proactive, mobile-first journey companion for Rachel, a fixed-schedule commuter travelling from Tampines to Raffles Place. It notices when today is different, recommends one clear action before she leaves, and shows exactly how her route changes.
 

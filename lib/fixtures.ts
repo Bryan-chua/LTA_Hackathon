@@ -198,11 +198,25 @@ const disruption: TravelCondition = {
   isReplay: true,
 };
 
+const plannedWork: TravelCondition = {
+  id: "replay-ewl-planned-2026-09-18",
+  kind: "planned_work",
+  severity: "major",
+  title: "Planned EWL engineering work between Paya Lebar and City Hall",
+  lineIds: ["EWL"],
+  stationCodes: ["EW8", "EW13"],
+  validFrom: "2026-09-18T07:00:00+08:00",
+  validTo: "2026-09-18T10:00:00+08:00",
+  source: "Labelled judging fixture - previous-day observation",
+  observedAt: "2026-09-17T18:00:00+08:00",
+  isReplay: true,
+};
+
 export const scenarios: Record<Scenario["id"], Scenario> = {
   normal: {
     id: "normal",
     label: "Normal morning",
-    isReplay: false,
+    isReplay: true,
     routine,
     usualJourney,
     conditions: [],
@@ -217,5 +231,15 @@ export const scenarios: Record<Scenario["id"], Scenario> = {
     recommendedJourney: alternativeJourney,
     conditions: [disruption],
     updatedAt: "07:30",
+  },
+  "ewl-planned-work": {
+    id: "ewl-planned-work",
+    label: "EWL planned work replay",
+    isReplay: true,
+    routine,
+    usualJourney: affectedJourney,
+    recommendedJourney: alternativeJourney,
+    conditions: [plannedWork],
+    updatedAt: "Previous day, 18:00",
   },
 };

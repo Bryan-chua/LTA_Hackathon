@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
     if (liveBody.dataMode !== undefined && liveBody.dataMode !== "replay") return invalidRequest("dataMode must be 'live' or 'replay'.");
     if (body.scenarioId !== undefined && !isScenarioId(body.scenarioId)) {
-      return invalidRequest("scenarioId must be 'normal' or 'ewl-disruption'.");
+      return invalidRequest("scenarioId must be 'normal', 'ewl-disruption', or 'ewl-planned-work'.");
     }
 
     if (body.demandProfile !== undefined && !isDemandProfile(body.demandProfile)) return invalidRequest("Invalid demand profile.");

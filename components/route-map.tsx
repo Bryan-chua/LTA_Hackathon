@@ -169,7 +169,7 @@ export function RouteMap({ usual, recommended, affectedSegments, compact = false
         </svg>
         <span className="fallback-attribution">Route schematic · © OpenStreetMap contributors</span>
       </div>
-      <div ref={containerRef} className={`route-map ${mapReady ? "route-map--ready" : ""}`} aria-hidden="true" />
+      <div ref={containerRef} className={`route-map ${mapReady ? "route-map--ready" : ""}`} />
       <div className="map-summary sr-only">
         The usual route runs from Tampines to Raffles Place
         {recommended ? "; the recommended route uses the Downtown Line to avoid the affected East-West Line" : ""}.
