@@ -1,6 +1,6 @@
-# Smart Commute — Deadline Shield + Collective Rerouting
+# Smart Commute — Deadline Shield, Collective Rerouting, and Evidence-First Accessible Travel
 
-Proactive, single-recommendation disruption guidance for a fixed-schedule commuter, built on OneMap routing and a MapLibre/OpenStreetMap base, with a small opt-in demo of demand-aware rerouting.
+Proactive, single-recommendation disruption guidance for a fixed-schedule commuter, built on OneMap routing and a MapLibre/OpenStreetMap base, with a small opt-in demo of demand-aware rerouting. The next scoped upgrade adds rain-aware sheltered-walking evidence and conservative lift-maintenance handling without claiming that an unverified route is accessible.
 
 ## 1. Problem and target persona
 
@@ -8,7 +8,7 @@ PS2 asks for proactive decision support during transit disruptions: reach commut
 
 We scoped the MVP to one of the brief's three personas, **Rachel**: a fixed-schedule EWL commuter travelling Tampines → Raffles Place, departing 07:40, with an 08:45 arrival deadline. Rachel doesn't want a dashboard — she wants the app to stay silent when her commute is safe, and to say one clear thing when it isn't: what to do, and what it costs her.
 
-We deliberately did not build for the brief's other two personas (Arjun, the comfort-optimising multi-modal commuter; Mdm Lim, the accessibility-constrained occasional traveller). The scoring model, UI copy, and notification logic are tuned to Rachel's deadline-risk framing and should not be read as equally suited to them. An "Accessible" travel-mode toggle (§10) exists as a minimal scoring reweighting (transfers and walking count more), not as validated support for Mdm Lim's needs — there is still no verified accessibility data source, and the app never claims a route, stop, or bus is accessible.
+Rachel remains the product's default persona; this is not becoming a full multi-persona app. The existing **Accessible travel** mode is a conservative, Mdm Lim-inspired option alongside **Standard commute**. Today it only reweights transfers and walking, and it never claims a route, stop, or bus is accessible. The planned upgrade in this write-up adds bounded evidence about reported lift maintenance and sheltered walking; it will still not equate an absence of an outage record with step-free access.
 
 ## 2. User journey / what the demo shows
 
@@ -18,15 +18,21 @@ The app runs in a **replay mode** by default (no live credentials required) with
 - **Unplanned disruption** — an EWL incident affects her leg; the app shows the affected segment, one recommended alternative (via DTL), the reasoning, and a deadline-risk-aware notification.
 - **Planned work** — a labelled maintenance-window scenario, run through the same decision path as the unplanned case, to show planned and unplanned disruptions are handled identically rather than as a bolt-on special case.
 
-For each scenario the map shows the original route, the affected portion distinguished, and the alternative for direct comparison, per the brief's visualization requirement. The app also demonstrates: offline behaviour (installed PWA shows the last-accepted route and timestamp with no network), a real push notification round-trip (VAPID-based Web Push, subscribed and fired from the device), and the opt-in demand-demo panel (see §5).
+The planned accessibility and rain-shelter upgrade will add two further deterministic replay scenarios. They will remain separate from live provider results:
 
-*A demo recording is not yet linked — see §13.*
+- **Rainy normal morning** — a normal Rachel commute with rain forecast, where an option with lower verified outdoor walking exposure can change the recommendation or its explanation.
+- **Mdm Lim lift-maintenance replay** — a fixture route whose explicitly required lift is reported under maintenance. In Accessible travel mode, that fixture is rejected only when the required lift ID matches the replay outage; the app then selects a verified fixture alternative or states that no verified accessible route is available.
+
+For the three currently shipped scenarios, the map shows the original route, the affected portion distinguished, and the alternative for direct comparison, per the brief's visualization requirement. The app also demonstrates: offline behaviour (installed PWA shows the last-accepted route and timestamp with no network), a real push notification round-trip (VAPID-based Web Push, subscribed and fired from the device), and the opt-in demand-demo panel (see §5).
+
+*A demo recording is not yet linked — see §12.*
 
 ## 3. Solution and differentiators
 
 - **One decision, not a feed.** The orchestrator (`lib/application/journey-orchestrator.ts`) always resolves to exactly one recommended alternative with a plain-language reason and change explanation, rather than a ranked list.
 - **Planned and unplanned disruptions share one code path.** Both scenario types run through the same affected-leg matcher (`lib/journey-engine.ts`) and scorer (`lib/journey-scoring.ts`) — there is no special-cased "maintenance mode."
 - **Deadline-risk-first notification logic.** `lib/morning-check.ts` computes explicit reason codes (`deadline_risk`, `material_delay`, `major_event`, `leave_earlier`) rather than firing on any delay, so Rachel is only interrupted when her 08:45 deadline is actually threatened.
+- **Evidence before reassurance.** The planned upgrade treats failed, stale, missing, or unmatched facilities and geospatial data as `unverified`. It will use a reported lift outage as a warning or a fixture eligibility check—not as a complete map of step-free access—and will only report covered/exposed walking distances after reliable geometry matching.
 - **Offline-safe by construction.** The service worker (`public/sw.js`) explicitly never caches `/api/*` responses — forecasts and personal data are excluded from the offline cache by design, not by oversight.
 - **A small, honestly-labelled step toward demand awareness** (§5) — most hackathon disruption tools stop at "here is an alternative"; this one also models, in a limited synthetic form, what happens if many commuters are sent to the same alternative at once.
 
@@ -58,7 +64,7 @@ app/api/            journeys, morning-check, push/*, demand/participation, cron/
 components/         commute-app (shell), route-map (MapLibre + offline fallback), routine-panel, demand-panel
 lib/                journey-engine (affected-leg matching), journey-scoring (Rachel score),
                     morning-check (notification decisioning), demand-flow (synthetic demand shift)
-lib/live/           datamall.ts, onemap.ts, weather.ts — real HTTP integrations (see §8)
+lib/live/           datamall.ts, onemap.ts, weather.ts — real HTTP integrations (see §7)
 lib/application/    orchestration, demand store/http contracts
 lib/client/         IndexedDB-backed offline journey/routine cache
 lib/server/         Postgres access, VAPID/web-push, cron worker
@@ -79,8 +85,9 @@ Implementation status is intentionally granular rather than a single "done" clai
 | Deadline-risk morning-check + Supabase Cron worker | Implemented |
 | Synthetic demand-aware rerouting demo | Implemented as a single-process, pseudonymous, explicitly-labelled demo (§4) |
 | Bus arrival / `Load` occupancy (LTA DataMall `v3/BusArrival`, `BusStops`, `BusRoutes`) | Implemented for standard-mode scoring and the Compare/Journey views, requires a real `LTA_DATAMALL_ACCOUNT_KEY`; bus-stop/bus-vehicle accessibility remains unverified and is never inferred from arrival data (see §10) |
-| Accessible travel-mode toggle | Implemented as a minimal scoring reweighting (transfers, walking) plus explicit "Accessibility: Unverified" labelling on bus legs; not step-free routing, no accessibility data source (see §10) |
-| Facilities Maintenance / lift-outage data | **Not implemented** |
+| Accessible travel-mode toggle | Implemented as a minimal interactive scoring reweighting (transfers, walking) plus explicit `Accessibility: Unverified` labelling on bus legs; it is not step-free routing and has no verified lift evidence yet |
+| Facilities Maintenance / lift-outage data | **Planned accessibility upgrade** — add LTA DataMall `v2/FacilitiesMaintenance`, preserving station/lift identifiers, source, freshness, and warnings. Failed, stale, or unmatched results will be `unverified`, never `available`. |
+| Covered walking / station-exit evidence | **Planned accessibility upgrade** — retrieve DataMall `GeospatialWholeIsland` layers (`CoveredLinkWay`, with `Footpath` and `TrainStationExit` only when useful) server-side through a bounded cache. Coverage remains unverified until route-geometry matching is reliable. |
 | 24-hour and 4-day weather forecasts | **Not implemented** (sample API response files exist in `docs/` for reference only; never fetched live) |
 | Self-hosted routing engine (GraphHopper/Valhalla) | **Not implemented** — considered in design docs, never built; OneMap is the only live routing provider |
 
@@ -92,6 +99,16 @@ Implementation status is intentionally granular rather than a single "done" clai
 - **Recommendation scoring**: `lib/journey-scoring.ts` applies a nine-factor weighted score tuned to Rachel (deadline safety margin, added walking time, transfer count, MRT crowding, bus wait time, bus vehicle load, etc.) and deterministically resolves ties, so the app always surfaces exactly one recommendation rather than a ranked list a commuter has to interpret. Bus vehicle load (`SEA`/`SDA`/`LSD`) is scored and displayed separately from MRT station crowding and is never folded into it.
 - **Uncertainty is shown, not hidden**: arrival ranges are labelled by their source (live, forecast, replay) and the app avoids presenting them as calibrated statistical confidence, since they have not been validated against observed outcomes.
 
+### Planned rain-shelter and accessibility extension
+
+The extension preserves the deterministic, explainable scorer; it does not introduce machine learning, confidence scores, or accuracy claims. Standard commute remains deadline-risk-first. If rain is forecast and reliable coverage matching exists, exposed walking adds a further penalty on top of the existing rain/walking treatment, allowing a slightly slower but more sheltered option to win. If coverage cannot be computed, the ordinary rain penalty remains and the UI says that outdoor exposure is unverified.
+
+Accessible travel will first apply a hard eligibility check only to replay fixtures that explicitly identify a required station exit and lift. A fixture is rejected only for a matching reported lift outage. For live journeys, the app will surface a prominent station-level lift-maintenance warning when relevant, but will label access as unverified unless a curated station-exit/lift mapping proves the required path. It will never infer accessibility merely because there is no reported outage. After that eligibility step, Accessible travel weights walking, transfers, verified exposed walking, and known shelter coverage more strongly.
+
+Both modes will keep an accepted active journey stable: condition refreshes affect future recommendations, never silently replace instructions the commuter has already accepted.
+
+The planned UI work keeps the two-mode control keyboard-accessible and phone-friendly, and persists its choice with the local routine rather than treating it as a temporary screen state. Today, Compare, and Journey will show the rain condition with provider and timestamp, lift-maintenance warnings, and covered/exposed walking only when verified. If evidence is insufficient, the explanation remains factual—such as `Accessibility information could not be verified for this route.`—and Accessible travel can reach a clear `No verified accessible route is available right now.` state.
+
 ## 7. Data sources: actual vs. planned
 
 | Source | Actual status |
@@ -102,10 +119,11 @@ Implementation status is intentionally granular rather than a single "done" clai
 | data.gov.sg 2-hour weather forecast | **Live**, applied to walking legs |
 | data.gov.sg 24-hour / 4-day weather forecast | **Planned, not implemented** — sample response files kept for reference only |
 | LTA DataMall bus arrival / `Load` occupancy (`v3/BusArrival`, `BusStops`, `BusRoutes`) | **Live**, real HTTP calls scoped to stops used by current candidate journeys, Zod-validated (`lib/live/bus-arrival.ts`, `lib/live/bus-reference.ts`) |
-| LTA DataMall Facilities Maintenance (lift outages) | **Planned, not implemented** — relevant to the accessibility persona we did not target |
+| LTA DataMall `v2/FacilitiesMaintenance` | **Planned, not implemented** — will supply reported MRT lift-maintenance evidence (line, station code/name, lift ID/description when supplied, provenance and freshness). It does not prove a station or route is step-free. |
+| LTA DataMall `GeospatialWholeIsland`: `CoveredLinkWay`, `Footpath`, `TrainStationExit` | **Planned, not implemented** — server-side, bounded-cache retrieval for shelter/exit geometry. Only reliable route matching can yield verified covered/exposed walking distance; otherwise coverage is unverified. |
 | OpenStreetMap (via MapLibre + OSM-derived vector tiles) | **Live**, used as the map base layer; OSM is not used for route computation itself |
 
-All disruption scenarios shown in the default demo are **replay/fixture data**, clearly selectable and labelled as such in the UI (Normal / Unplanned disruption / Planned work), because live disruptions are infrequent and cannot be relied on to occur during judging.
+All disruption scenarios shown in the default demo are **replay/fixture data**, clearly selectable and labelled as such in the UI (Normal / Unplanned disruption / Planned work), because live disruptions are infrequent and cannot be relied on to occur during judging. The two planned rain/accessibility scenarios follow the same rule. A live provider failure must report that failure or unverified evidence; it must never silently substitute a replay fixture.
 
 ## 8. Alignment to PS2 mandatory requirements
 
@@ -115,6 +133,7 @@ All disruption scenarios shown in the default demo are **replay/fixture data**, 
 - **No personal data without permission** — the demand demo is opt-in and cookie-scoped; push profiles store only coordinates/times/thresholds needed for the feature, no names or addresses.
 - **No committed credentials** — `.env.example` lists variable names only; `.gitignore` excludes all `.env*` except `.env.example`.
 - **Mocked data must be clearly labelled** — all three demo scenarios are explicitly named as replay/fixture in the UI copy; the demand feature is labelled synthetic in its own panel and docs.
+- **Accessibility claims** — currently, bus accessibility is explicitly unverified and Accessible travel is only a scoring preference. The planned extension makes this more conservative, not less: lift-maintenance and shelter evidence will carry source/freshness labels, unavailable data will remain unverified, and no route will be called step-free without a curated proof of its required access path.
 - **Beyond the brief (3.3)** — the synthetic demand-aware rerouting demo is offered as a modest, explicitly-scoped step toward "beyond 3.2" innovation. We are not claiming it as a calibrated or production-grade prediction system, per the honesty requirements above.
 
 ## 9. Evaluation approach and success metrics
@@ -126,19 +145,22 @@ What does exist:
 - No CI is configured (by design, documented in `docs/EVALUATION_AND_TESTING.md`), so there is no automated, judge-independent record of a passing run — only what a judge reproduces themselves from a clean clone.
 - Before judging, we intend to actually run the full suite ourselves and report the real, reproducible result here rather than an unverified narrative claim.
 
+The planned upgrade adds testable, deterministic acceptance criteria: existing saved routines default to Standard commute; verified shelter data increases the rain penalty for exposed walking and can favour a better-sheltered route; unavailable shelter data leaves Standard mode functional without a false coverage claim; and a replay route with a matching required-lift outage is rejected in Accessible travel. Provider-contract and Playwright coverage will also check visible source/freshness/replay labels, the no-verified-accessible-route state, mobile/keyboard accessibility, and that live failures never fall back to fixtures. Existing bus arrival/load behaviour remains covered and is not evidence of accessibility.
+
 ## 10. Known limitations and next steps before final judging
 
-- Built and tuned for one persona (Rachel) and one city/timezone; not validated against Arjun's or Mdm Lim's needs.
-- Bus arrival/`Load` data is integrated (§5, §6) as a reliability signal for scoring. A minimal Accessible travel-mode toggle exists (header, both replay and live plans) that reweights scoring toward transfers and walking distance — the two already-measured factors that matter most without verified step-free data. It is not step-free routing: it does not filter routes, and bus-stop/bus-vehicle accessibility is always shown as unverified, never inferred from the presence of arrival data. Facilities Maintenance / lift-outage data — the actual accessibility-relevant source named in the brief — is still not integrated.
-- Only the 2-hour weather forecast is live; 24-hour/4-day forecasts are unused reference files, not integrations.
+- Built and tuned for one persona (Rachel) and one city/timezone; Accessible travel is conservative support, not validation that the product meets every Mdm Lim use case.
+- Bus arrival/`Load` is a reliability signal only. It does not establish bus-stop, vehicle, or route accessibility, and the product must keep showing `Accessibility: Unverified` for bus legs unless a separate verified source is added.
+- The planned Facilities Maintenance integration reports individual maintained lifts. Even a matching lift outage does not prove that an entire station or route is inaccessible; conversely, no outage record does not prove a step-free path exists.
+- Covered-link matching can be incomplete: a source layer may fail to load, be stale, omit a link, or not align reliably with a route geometry. In those cases the app must show coverage as unverified, retain the ordinary rain penalty, and avoid saying `fully sheltered`.
+- Only the 2-hour weather forecast is live; it is area-level rather than street-level. The 24-hour/4-day files are unused reference samples, not integrations.
+- The interactive mode toggle is not stored in the current server-side push profile. Therefore scheduled push checks currently use Standard commute. The planned work must either add a migration, validation, and safe Standard default to persist the preference, or retain this explicit local-only limitation.
 - ETA/arrival ranges are rule-based and have not been calibrated against observed outcomes.
 - The demand-aware rerouting demo is a single-process, pseudonymous, synthetic-data demonstration — not a production telemetry or prediction system.
-- Web Push delivery is best-effort and platform-dependent; the in-app manual check remains the reliable fallback.
-- No user accounts or cross-device routine sync.
-- No CI and no independently-verified test-run record yet — we plan to run the full suite and capture real output before submission.
-- OSM attribution rendering on the live map has not been independently re-verified at demo time.
+- Web Push delivery is best-effort and platform-dependent; the in-app manual check remains the reliable fallback. There is no user account or cross-device routine sync.
+- No CI and no independently verified test-run record yet; OSM attribution rendering also still needs a final live-map visual check.
 
-**Next steps before final judging**: run and record the real test-suite output; do a real-phone (not desktop-emulated) pass for the visualization and one-handed-use requirements, including bright-sunlight legibility; verify OSM attribution renders on the live tile style; record the required demo video; and re-verify OneMap's terms/quotas hold up under live credentials before presenting it as the primary routing path.
+**Next steps before final judging**: implement the bounded, server-side Facilities Maintenance and GeospatialWholeIsland adapters; inspect real layer payloads and attributes before committing to field mappings; add the two labelled replay cases and their tests; decide whether travel mode belongs in the scheduled-profile schema; and run `npm run lint`, `npm run test:unit`, `npm run test:contracts`, `npm run build`, and `npm run test:e2e`, recording their real output. Finish with a real-phone, bright-sunlight and one-handed-use pass, verify OSM attribution on the live tile style, record the required demo video, and re-check OneMap/DataMall terms and quotas under live credentials.
 
 ## 11. How to run the project locally
 
