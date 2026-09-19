@@ -8,6 +8,7 @@ import type {
   ScoreComponentDetail,
   ScoreComponentKey,
   TravelCondition,
+  TravelMode,
 } from "./domain";
 import { conditionsAffectingJourney } from "./condition-matching";
 import { forecastJourneyReliability } from "./reliability-forecast";
@@ -59,6 +60,7 @@ interface CandidateMetrics {
   uncertaintyMinutes: number;
   deadlineRiskMinutes: number;
   routeChangeLabel: string;
+  exposedWalkingMinutes: number;
 }
 
 interface PenaltyPoint {
@@ -174,6 +176,21 @@ const weatherMultiplier = (journey: Journey, conditions: TravelCondition[]) => {
   return severities.length > 0 ? Math.max(...severities) : 1;
 };
 
+const exposedWalkingMinutes = (journey: Journey, conditions: TravelCondition[]) => {
+  const rain = conditions
+    .filter((condition) => condition.kind === "weather")
+    .sort((left, right) => ({ info: 1, minor: 2, major: 3 }[right.severity] - { info: 1, minor: 2, major: 3 }[left.severity]))[0];
+  const walking = journey.legs.filter((leg) => leg.mode === "walk");
+  if (!rain) return walking.reduce((sum, leg) => sum + leg.durationMinutes, 0);
+  return walking.reduce((sum, leg) => {
+    const coverage = leg.shelterCoverage;
+    if (coverage?.status !== "verified" || coverage.exposedDistanceMeters === undefined) return sum + leg.durationMinutes;
+    const total = (coverage.coveredDistanceMeters ?? 0) + coverage.exposedDistanceMeters;
+    if (total <= 0) return sum + leg.durationMinutes;
+    return sum + leg.durationMinutes * coverage.exposedDistanceMeters / total;
+  }, 0);
+};
+
 const routeChange = (journey: Journey, baseline: Journey) => {
   if (journey.id === baseline.id) return { normalized: 0, label: "Usual route" };
   const baselineLines = new Set(baseline.legs.flatMap((leg) => leg.lineId ? [leg.lineId] : []));
@@ -251,7 +268,11 @@ function scoreJourney(
   const transfers = countTransfers(journey);
   const walkingMinutes = countWalkingMinutes(journey);
   const rainMultiplier = weatherMultiplier(journey, context.conditions);
-  const effectiveWalkingMinutes = Math.round(walkingMinutes * rainMultiplier);
+  const exposedMinutes = exposedWalkingMinutes(journey, context.conditions);
+  const hasVerifiedCoverage = journey.legs.some((leg) => leg.mode === "walk" && leg.shelterCoverage?.status === "verified");
+  const effectiveWalkingMinutes = hasVerifiedCoverage && rainMultiplier > 1
+    ? Math.round(walkingMinutes + (rainMultiplier - 1) * exposedMinutes)
+    : Math.round(walkingMinutes * rainMultiplier);
   const crowding = worstCrowding(journey);
   const risk = forecastDeadlineRisk(journey, context.deadline, reliability);
   const churn = routeChange(journey, context.baselineJourney);
@@ -290,7 +311,9 @@ function scoreJourney(
     component(
       "walkingAndRainPenalty",
       "Walking exposure",
-      rainMultiplier > 1 ? `${effectiveWalkingMinutes} min rain-adjusted` : `${walkingMinutes} min walking`,
+      rainMultiplier > 1 && hasVerifiedCoverage
+        ? `${Math.round(exposedMinutes)} min exposed walking`
+        : rainMultiplier > 1 ? `${effectiveWalkingMinutes} min rain-adjusted` : `${walkingMinutes} min walking`,
       effectiveWalkingMinutes / 30,
       weights,
     ),
@@ -336,6 +359,7 @@ function scoreJourney(
       uncertaintyMinutes,
       deadlineRiskMinutes: risk.minutesAtRisk,
       routeChangeLabel: churn.label,
+      exposedWalkingMinutes: Math.round(exposedMinutes),
     },
   };
 }
@@ -353,10 +377,15 @@ export function scoreJourneyCandidates(
   deadline: string,
   conditions: TravelCondition[],
   weights: JourneyScoreWeights = RACHEL_SCORE_WEIGHTS,
+  travelMode?: TravelMode,
 ): Alternative[] {
   validateWeights(weights);
-  const journeys = [usual, ...(Array.isArray(candidate) ? candidate : candidate ? [candidate] : [])];
-  const bestArrivalMinutes = Math.min(...journeys.map((journey) => minutesSinceMidnight(journey.arrival.p50)));
+  const allJourneys = [usual, ...(Array.isArray(candidate) ? candidate : candidate ? [candidate] : [])];
+  const journeys = travelMode === "accessible"
+    ? allJourneys.filter((journey) => !journey.accessibility || journey.accessibility.status !== "affected")
+    : allJourneys;
+  const scoredJourneys = journeys.length > 0 ? journeys : allJourneys;
+  const bestArrivalMinutes = Math.min(...scoredJourneys.map((journey) => minutesSinceMidnight(journey.arrival.p50)));
   const context: ScoreContext = {
     deadline,
     baselineJourney: usual,
@@ -364,7 +393,7 @@ export function scoreJourneyCandidates(
     conditions,
   };
 
-  const scored = journeys.map((journey) => {
+  const scored = scoredJourneys.map((journey) => {
     const reliability = forecastJourneyReliability(journey, deadline, conditions);
     const { breakdown, metrics } = scoreJourney(journey, context, weights, reliability);
     return { journey, breakdown, metrics, reliability };

@@ -338,6 +338,22 @@ const plannedWork: TravelCondition = {
   isReplay: true,
 };
 
+const mdmLiftMaintenance: TravelCondition = {
+  id: "replay-mdm-lift-ew2-exit-a",
+  kind: "facility_maintenance",
+  severity: "major",
+  title: "Tampines MRT Exit A lift maintenance",
+  lineIds: ["EWL"],
+  stationCodes: ["EW2"],
+  validFrom: "2026-09-18T07:00:00+08:00",
+  validTo: "2026-09-18T10:00:00+08:00",
+  source: "Labelled Mdm Lim accessibility fixture",
+  observedAt: "2026-09-18T07:30:00+08:00",
+  isReplay: true,
+  liftId: "EW2-EXIT-A-LIFT-1",
+  liftDescription: "Exit A lift",
+};
+
 export const scenarios: Record<Scenario["id"], Scenario> = {
   normal: {
     id: "normal",
@@ -367,5 +383,24 @@ export const scenarios: Record<Scenario["id"], Scenario> = {
     recommendedJourney: alternativeJourney,
     conditions: [plannedWork],
     updatedAt: "Previous day, 18:00",
+  },
+  "mdm-lift-maintenance": {
+    id: "mdm-lift-maintenance",
+    label: "Mdm Lim lift maintenance replay",
+    isReplay: true,
+    routine,
+    usualJourney: {
+      ...usualJourney,
+      accessibility: {
+        status: "verified",
+        requiredStationCode: "EW2",
+        requiredStationName: "Tampines",
+        requiredLiftId: "EW2-EXIT-A-LIFT-1",
+        liftStatus: "available",
+      },
+    },
+    recommendedJourney: alternativeJourney,
+    conditions: [mdmLiftMaintenance],
+    updatedAt: "07:30",
   },
 };

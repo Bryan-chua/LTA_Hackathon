@@ -93,6 +93,27 @@ describe("journey scoring", () => {
     assert.ok(options[0].score < options[1].score);
     assert.equal(options[0].scoreBreakdown.components.filter(({ weight }) => weight > 0).length, 1);
   });
+
+  it("prefers verified covered walking during rain when the sheltered option is slightly slower", () => {
+    const scenario = scenarios["normal"];
+    const rain: TravelCondition = {
+      id: "rain", kind: "weather", severity: "major", title: "Heavy rain",
+      validFrom: "2026-09-18T07:00:00+08:00", validTo: "2026-09-18T09:00:00+08:00",
+      source: "fixture", observedAt: "2026-09-18T07:20:00+08:00", isReplay: true,
+    };
+    const exposed = { ...scenario.usualJourney, id: "exposed-route", arrival: { p50: "08:39", earliest: "08:37", latest: "08:42" } };
+    const sheltered = {
+      ...scenario.usualJourney,
+      id: "sheltered-route",
+      arrival: { p50: "08:40", earliest: "08:39", latest: "08:43" },
+      legs: scenario.usualJourney.legs.map((leg) => leg.mode === "walk"
+        ? { ...leg, shelterCoverage: { status: "verified" as const, coveredDistanceMeters: 500, exposedDistanceMeters: 40 } }
+        : leg),
+    };
+    const options = scoreJourneyCandidates(exposed, sheltered, "08:50", [rain], ACCESSIBLE_SCORE_WEIGHTS, "accessible");
+    assert.equal(options[0]?.journey.id, "sheltered-route");
+    assert.match(options.find((option) => option.journey.id === "sheltered-route")?.scoreBreakdown.components.find((component) => component.key === "walkingAndRainPenalty")?.valueLabel ?? "", /exposed walking/);
+  });
 });
 
 describe("bus wait and load scoring", () => {

@@ -50,4 +50,10 @@ describe("journey orchestrator", () => {
       standard.alternatives[0]!.scoreBreakdown.components.map((component) => component.key).sort(),
     );
   });
+
+  it("rejects a replay route whose explicitly required lift is under maintenance", async () => {
+    const plan = await orchestrator.plan({ scenarioId: "mdm-lift-maintenance", travelMode: "accessible" });
+    assert.ok(plan.alternatives.every((option) => option.journey.accessibility?.status !== "affected"));
+    assert.equal(plan.alternatives[0]?.journey.id, "recommended-dtl-route");
+  });
 });

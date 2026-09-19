@@ -92,13 +92,24 @@ export class JourneyOrchestrator {
       throw new JourneyNotFoundError("planned-journey");
     }
 
+    const fixtureConditions = fixtureScenario.conditions;
+    const markLiftOutage = (journey: Journey): Journey => {
+      const required = journey.accessibility;
+      const outage = required?.requiredLiftId && fixtureConditions.some((condition) =>
+        condition.isReplay && condition.kind === "facility_maintenance" && condition.liftId === required.requiredLiftId);
+      return outage ? {
+        ...journey,
+        accessibility: { ...required, status: "affected", liftStatus: "affected", warning: `${required.liftDescription ?? "Required lift"} is reported under maintenance. This route is not recommended in Accessible travel mode.` },
+      } : journey;
+    };
     const scenario: Scenario = {
       ...fixtureScenario,
       routine: command.routine ?? fixtureScenario.routine,
-      usualJourney,
-      recommendedJourney: journeys[1],
+      usualJourney: markLiftOutage(usualJourney),
+      recommendedJourney: journeys[1] ? markLiftOutage(journeys[1]) : undefined,
+      conditions: fixtureConditions,
     };
-    const evaluation = this.evaluateScenario(scenario, usualJourney.id, journeys.slice(1), scoreWeightsFor(command.travelMode));
+    const evaluation = this.evaluateScenario(scenario, usualJourney.id, journeys.slice(1), scoreWeightsFor(command.travelMode), command.travelMode);
     const selected = evaluation.alternatives.find((option) => option.recommended)?.journey;
     scenario.recommendedJourney = selected?.id !== usualJourney.id ? selected : undefined;
     if (selected?.id === "relief-tel-route") {
@@ -106,7 +117,12 @@ export class JourneyOrchestrator {
       evaluation.recommendation.changeExplanation = "Accepted demo reroutes shift demand towards the DTL. This separate bus-and-TEL route avoids both the EWL disruption and the projected DTL peak. Estimates are synthetic.";
     }
 
-    return { scenario, ...evaluation, ...(projection ? { demand: projection.demand } : {}) };
+    const accessibilityNotice = command.travelMode === "accessible"
+      && evaluation.alternatives.length > 0
+      && evaluation.alternatives.every((option) => option.journey.accessibility?.status === "affected")
+      ? "No verified accessible route is available right now."
+      : undefined;
+    return { scenario, ...evaluation, ...(projection ? { demand: projection.demand } : {}), ...(accessibilityNotice ? { accessibilityNotice } : {}) };
   }
 
   async evaluate(journeyId: string, scenarioId: Scenario["id"], demand?: PlanJourneyCommand["demand"]): Promise<JourneyEvaluationView> {
@@ -133,6 +149,7 @@ export class JourneyOrchestrator {
     journeyId: string,
     candidates?: Journey[],
     weights = RACHEL_SCORE_WEIGHTS,
+    travelMode?: TravelMode,
   ): JourneyEvaluationView {
     const alternatives = buildAlternatives(
       scenario.usualJourney,
@@ -140,6 +157,7 @@ export class JourneyOrchestrator {
       scenario.routine.arrivalDeadline,
       scenario.conditions,
       weights,
+      travelMode,
     );
     return {
       journeyId,
@@ -151,7 +169,7 @@ export class JourneyOrchestrator {
   }
 
   private getScenario(scenarioId: string): Scenario {
-    if (scenarioId === "normal" || scenarioId === "ewl-disruption" || scenarioId === "ewl-planned-work") {
+    if (scenarioId === "normal" || scenarioId === "ewl-disruption" || scenarioId === "ewl-planned-work" || scenarioId === "mdm-lift-maintenance") {
       return scenarios[scenarioId];
     }
     throw new ScenarioNotFoundError(scenarioId);

@@ -7,6 +7,8 @@ export type TravelMode = "standard" | "accessible";
 export type CrowdingLevel = "low" | "moderate" | "high" | "unknown";
 export type DataMode = "live" | "replay";
 export type ProviderMode = "live" | "forecast" | "replay" | "cached";
+export type LiftStatus = "available" | "affected" | "unverified";
+export type ShelterCoverageStatus = "verified" | "unverified";
 
 export interface ProviderMetadata {
   source: string;
@@ -76,6 +78,26 @@ export interface JourneyLeg {
   geometry: Coordinate[];
   geometrySections?: JourneyLegGeometrySection[];
   busArrival?: BusArrivalInfo;
+  shelterCoverage?: ShelterCoverageEvidence;
+}
+
+export interface ShelterCoverageEvidence {
+  status: ShelterCoverageStatus;
+  coveredDistanceMeters?: number;
+  exposedDistanceMeters?: number;
+  source?: ProviderMetadata;
+  warning?: string;
+}
+
+export interface AccessibilityEvidence {
+  status: "verified" | "affected" | "unverified";
+  requiredStationCode?: string;
+  requiredStationName?: string;
+  requiredLiftId?: string;
+  liftDescription?: string;
+  liftStatus: LiftStatus;
+  source?: ProviderMetadata;
+  warning?: string;
 }
 
 export interface Journey {
@@ -90,6 +112,7 @@ export interface Journey {
   source: "onemap" | "google" | "graphhopper" | "valhalla" | "fixture";
   generatedAt: string;
   provider?: ProviderMetadata;
+  accessibility?: AccessibilityEvidence;
 }
 
 export interface TravelCondition {
@@ -103,6 +126,8 @@ export interface TravelCondition {
   coordinate?: Coordinate;
   radiusMeters?: number;
   expectedDelayMinutes?: number;
+  liftId?: string;
+  liftDescription?: string;
   validFrom: string;
   validTo?: string;
   source: string;
@@ -199,7 +224,7 @@ export interface AffectedSegment {
 }
 
 export interface Scenario {
-  id: "normal" | "ewl-disruption" | "ewl-planned-work";
+  id: "normal" | "ewl-disruption" | "ewl-planned-work" | "mdm-lift-maintenance";
   label: string;
   isReplay: boolean;
   routine: Routine;

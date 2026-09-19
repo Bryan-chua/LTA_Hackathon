@@ -97,6 +97,8 @@ export async function facilityMaintenanceConditions(now = new Date()): Promise<P
       source: "LTA DataMall FacilitiesMaintenance",
       observedAt,
       isReplay: false,
+      liftId: row.LiftID || undefined,
+      liftDescription: row.LiftDesc || undefined,
     })),
     metadata: providerMetadata("LTA DataMall FacilitiesMaintenance", "live", { fetchedAt: observedAt, staleAt }),
   };

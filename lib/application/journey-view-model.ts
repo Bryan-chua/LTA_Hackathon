@@ -36,6 +36,7 @@ export interface JourneyPlanView extends JourneyEvaluationView {
   demand?: DemandView;
   dataMode?: DataMode;
   providers?: ProviderStateView[];
+  accessibilityNotice?: string;
 }
 
 export interface JourneyComparisonView {

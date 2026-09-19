@@ -11,6 +11,7 @@ import { enrichBusLegs } from "./bus-enrichment";
 import { weatherConditions } from "./weather";
 import { facilityMaintenanceConditions, floodAlertConditions, trafficIncidentConditions } from "./lta-conditions";
 import { trainTripUpdateConditions } from "./gtfs-train";
+import { shelterCoverageForJourneys } from "./geospatial";
 
 const crowdRank: Record<CrowdingLevel, number> = { unknown: 0, low: 1, moderate: 2, high: 3 };
 const worst = (levels: CrowdingLevel[]) => levels.sort((a, b) => crowdRank[b] - crowdRank[a])[0] ?? "unknown";
@@ -30,6 +31,25 @@ const failedProvider = (name: string, error: unknown, critical = false): Provide
   mode: "live",
   fetchedAt: new Date().toISOString(),
   warnings: [error instanceof Error ? error.message : `${name} unavailable.`],
+});
+
+const applyAccessibilityEvidence = (journeys: Journey[], conditions: TravelCondition[]): Journey[] => journeys.map((journey) => {
+  const outages = conditions.filter((condition) => condition.kind === "facility_maintenance");
+  const relevant = outages.filter((condition) => condition.stationCodes?.some((station) => journey.legs.some((leg) => leg.stationCodes?.includes(station))));
+  const first = relevant[0];
+  if (!first) return journey.accessibility ? journey : { ...journey, accessibility: { status: "unverified", liftStatus: "unverified", warning: "Accessibility information could not be verified for this route." } };
+  return {
+    ...journey,
+    accessibility: {
+      status: "affected",
+      requiredStationCode: first.stationCodes?.[0],
+      requiredLiftId: first.liftId,
+      liftDescription: first.liftDescription,
+      liftStatus: "affected",
+      source: first.provider,
+      warning: `${first.title} affects a station used by this route. Accessibility information is not verified.`,
+    },
+  };
 });
 
 const clockWithMinutes = (value: string, addedMinutes: number) => {
@@ -109,7 +129,8 @@ export async function planLiveJourney(routine: Routine, now = new Date(), travel
     throw new ProviderError("Routing", "configuration", "ROUTING_PROVIDER must be 'onemap' or 'google'.");
   }
   const routing = routingProvider === "google" ? new GoogleRoutesRoutingProvider() : new OneMapRoutingProvider();
-  const journeys = await routing.plan(routine);
+  let journeys = await routing.plan(routine);
+  const shelter = await shelterCoverageForJourneys(journeys, now).catch((error: unknown) => ({ error }));
   const conditionChecks = await Promise.allSettled([
     trainServiceConditions(now),
     trainTripUpdateConditions(now),
@@ -120,6 +141,12 @@ export async function planLiveJourney(routine: Routine, now = new Date(), travel
   ]);
   const conditions: TravelCondition[] = [];
   const providers: ProviderStateView[] = [providerView(journeys[0].provider!)];
+  if ("error" in shelter) {
+    providers.push(failedProvider("LTA DataMall geospatial shelter layers", shelter.error));
+  } else {
+    journeys = shelter.data;
+    providers.push(providerView(shelter.metadata));
+  }
   const conditionNames = [
     "LTA TrainServiceAlerts",
     "LTA GTFS train trip updates",
@@ -141,9 +168,9 @@ export async function planLiveJourney(routine: Routine, now = new Date(), travel
   providers.push(...bused.providers);
   const relevantConditions = conditions.filter((condition) =>
     bused.journeys.some((journey) => conditionsAffectingJourney(journey, [condition]).length > 0));
-  const impacted = applyLiveConditionImpacts(bused.journeys, relevantConditions, travelMode);
+  const impacted = applyAccessibilityEvidence(applyLiveConditionImpacts(bused.journeys, relevantConditions, travelMode), relevantConditions);
   const [usual, ...candidates] = impacted;
-  const alternatives = buildAlternatives(usual, candidates, routine.arrivalDeadline, relevantConditions, scoreWeightsFor(travelMode));
+  const alternatives = buildAlternatives(usual, candidates, routine.arrivalDeadline, relevantConditions, scoreWeightsFor(travelMode), travelMode);
   const selected = alternatives.find((alternative) => alternative.recommended)?.journey;
   const scenario: Scenario = {
     id: "normal",
@@ -164,5 +191,8 @@ export async function planLiveJourney(routine: Routine, now = new Date(), travel
     recommendation: buildRecommendation(scenario, alternatives),
     dataMode: "live",
     providers,
+    ...(travelMode === "accessible" && alternatives.length > 0 && alternatives.every((option) => option.journey.accessibility?.status === "affected")
+      ? { accessibilityNotice: "No verified accessible route is available right now." }
+      : {}),
   };
 }

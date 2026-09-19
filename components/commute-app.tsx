@@ -219,6 +219,7 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
       </div>
       {plan.providers?.some((provider) => provider.status !== "available") &&
         <div className="provider-warning"><AlertTriangle size={15} />Some live sources are unavailable. Unknown data is not treated as normal.</div>}
+      {plan.accessibilityNotice && <div className="provider-warning" role="status"><AlertTriangle size={15} />{plan.accessibilityNotice}</div>}
 
       <article className={`recommendation-card ${!disrupted ? "recommendation-card--normal" : ""}`}>
         <div className="decision-label">
@@ -334,6 +335,11 @@ function RouteOption({ option, affected, accessibleMode, onUse }: { option: Alte
       </div>
       <h2>{journey.name}</h2>
       <p>{option.explanation}</p>
+      {journey.accessibility?.warning && <p className="provider-warning"><AlertTriangle size={14} />{journey.accessibility.warning}</p>}
+      {journey.accessibility?.status === "unverified" && accessibleMode && <p className="bus-arrival__accessibility"><Accessibility size={12} />Accessibility information could not be verified for this route.</p>}
+      {journey.legs.some((leg) => leg.shelterCoverage?.status === "verified") && (
+        <p className="bus-arrival__accessibility">Lower outdoor walking exposure: {journey.legs.reduce((sum, leg) => sum + (leg.shelterCoverage?.coveredDistanceMeters ?? 0), 0)}m covered, {journey.legs.reduce((sum, leg) => sum + (leg.shelterCoverage?.exposedDistanceMeters ?? 0), 0)}m exposed.</p>
+      )}
       <ReliabilityForecast option={option} />
       {journey.demandForecast && (
         <details className="demand-details">
@@ -366,11 +372,12 @@ function RouteOption({ option, affected, accessibleMode, onUse }: { option: Alte
   );
 }
 
-function CompareScreen({ scenario, alternatives, affectedSegments, travelMode, onUse }: { scenario: Scenario; alternatives: Alternative[]; affectedSegments: AffectedSegment[]; travelMode: TravelMode; onUse: (journey: Journey) => void }) {
+function CompareScreen({ scenario, alternatives, affectedSegments, travelMode, accessibilityNotice, onUse }: { scenario: Scenario; alternatives: Alternative[]; affectedSegments: AffectedSegment[]; travelMode: TravelMode; accessibilityNotice?: string; onUse: (journey: Journey) => void }) {
   const accessibleMode = travelMode === "accessible";
   return (
     <main id="main-content" className="screen">
       <section className="page-intro"><span>ROUTE COMPARISON</span><h1>Choose your best way in</h1><p>Compared against your 8:45 arrival deadline.</p></section>
+      {accessibilityNotice && <div className="provider-warning" role="status"><AlertTriangle size={15} />{accessibilityNotice}</div>}
       {alternatives.map((option) => (
         <RouteOption key={option.id} option={option} affected={affectedSegments.length > 0 && option.journey.id === scenario.usualJourney.id}
           accessibleMode={accessibleMode} onUse={onUse} />
@@ -378,7 +385,7 @@ function CompareScreen({ scenario, alternatives, affectedSegments, travelMode, o
       <section className="comparison-note">
         <Info size={18} />
         <p><strong>How we compare</strong>Arrival reliability, walking, transfers and crowding are scored for Rachel&apos;s saved routine.
-          {accessibleMode && " Accessible mode weights transfers and walking more heavily; it does not filter or verify accessibility."}</p>
+          {accessibleMode && " Accessible travel filters reported required-lift outages and remains conservative when access evidence is unavailable."}</p>
       </section>
     </main>
   );
@@ -686,7 +693,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
       {decisionMessage && <div className="decision-banner" role="status"><Radio size={16} />{decisionMessage}</div>}
       <div className="live-region" aria-live="polite">{announcement}</div>
       {screen === "today" && <TodayScreen plan={plan} onCompare={showComparison} onUse={() => selectRoute()} />}
-      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} affectedSegments={plan.affectedSegments} travelMode={travelMode} onUse={selectRoute} />}
+      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} affectedSegments={plan.affectedSegments} travelMode={travelMode} accessibilityNotice={plan.accessibilityNotice} onUse={selectRoute} />}
       {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} persistence={persistence} travelMode={travelMode} />}
       {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
         busy={demandBusy || isScenarioLoading} online={online} message={demandMessage}

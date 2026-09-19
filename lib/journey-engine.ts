@@ -8,6 +8,7 @@ export function buildAlternatives(
   deadline: string,
   conditions: TravelCondition[],
   weights?: JourneyScoreWeights,
+  travelMode?: import("./domain").TravelMode,
 ): Alternative[] {
-  return scoreJourneyCandidates(usual, recommended, deadline, conditions, weights);
+  return scoreJourneyCandidates(usual, recommended, deadline, conditions, weights, travelMode);
 }

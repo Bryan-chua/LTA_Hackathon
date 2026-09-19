@@ -39,6 +39,7 @@ describe("LTA commuter condition providers", () => {
     }] });
     const result = await facilityMaintenanceConditions(new Date("2026-09-19T00:00:00Z"));
     assert.equal(result.data[0]?.kind, "facility_maintenance");
+    assert.equal(result.data[0]?.liftId, "B3L02");
     assert.deepEqual(result.data[0]?.lineIds, ["DTL"]);
     assert.deepEqual(result.data[0]?.stationCodes, ["DT10"]);
   });
