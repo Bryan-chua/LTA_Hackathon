@@ -1,22 +1,5 @@
 # Smart Commuter Companion
 
-## Run the app
-
-The first mobile-first vertical slice is now implemented with Next.js, TypeScript, MapLibre and deterministic journey fixtures.
-
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000`. The app hydrates a saved journey, then attempts a live check when online. Use the header selector for the clearly labelled normal, unplanned-disruption, and planned-work replay paths.
-
-```bash
-npm test
-npm run lint
-npm run build
-```
-
 The current slice includes Today, Compare and Journey views, a real OSM-based map, fixture provider boundaries, affected-leg detection, a deterministic route recommendation, active-journey persistence and a production service worker. Live OneMap and DataMall credentials are not required yet; copy `.env.example` to `.env.local` when those adapters are added.
 
 ## Implementation tracker
