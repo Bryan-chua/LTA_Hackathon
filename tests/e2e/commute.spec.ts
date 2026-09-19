@@ -25,6 +25,26 @@ test("loads the labelled planned-work path", async ({ page }) => {
   await expect(page.getByText("Your morning journey needs one change.")).toBeVisible();
 });
 
+test("header and route affordances perform their advertised actions", async ({ page }) => {
+  await page.getByRole("button", { name: "About this concept" }).click();
+  await expect(page.getByRole("dialog", { name: "A proactive companion for Rachel's commute" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open Rachel's routine profile" }).click();
+  await expect(page.locator("#routine-editor")).toHaveAttribute("open", "");
+  await expect(page.locator("#routine-editor summary")).toBeFocused();
+
+  await page.getByRole("button", { name: "Compare route options" }).click();
+  await expect(page.getByRole("heading", { name: "Choose your best way in" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Today" }).click();
+  await page.getByLabel("Data scenario").selectOption("ewl-disruption");
+  await expect(page.getByRole("button", { name: "Review disruption impact and route alternatives" })).toBeVisible();
+  await page.getByRole("button", { name: "Review disruption impact and route alternatives" }).click();
+  await expect(page.getByRole("heading", { name: "Choose your best way in" })).toBeVisible();
+});
+
 test("announces offline state without discarding the visible journey", async ({ page, context }) => {
   await page.getByRole("button", { name: "Use this route" }).click();
   await expect(page.getByText("Available offline")).toBeVisible();

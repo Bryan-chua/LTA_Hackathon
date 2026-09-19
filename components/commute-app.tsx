@@ -59,19 +59,47 @@ function BrandMark() {
   );
 }
 
-function GovernmentBanner() {
+function GovernmentBanner({ onAbout }: { onAbout: () => void }) {
   return (
     <div className="government-banner">
       <ShieldCheck size={13} aria-hidden="true" />
       <span>Hackathon concept · Unofficial commuter demo</span>
-      <button aria-label="About this concept"><Info size={13} /></button>
+      <button type="button" onClick={onAbout} aria-label="About this concept"><Info size={13} /></button>
     </div>
   );
 }
 
-function Header({ scenario, onMode, isLoading }: {
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="concept-dialog" role="dialog" aria-modal="true" aria-labelledby="concept-dialog-title">
+        <span className="dialog-eyebrow">ABOUT THIS CONCEPT</span>
+        <h2 id="concept-dialog-title">A proactive companion for Rachel&apos;s commute</h2>
+        <p>Smart Commute checks a saved Tampines-to-Raffles Place routine and recommends a clear action only when conditions materially affect the trip.</p>
+        <ul>
+          <li><strong>Live and replay stay distinct.</strong> Provider freshness and labelled judging fixtures are never mixed silently.</li>
+          <li><strong>Privacy is device-first.</strong> Address labels and saved journeys stay in IndexedDB unless Rachel explicitly enables alerts.</li>
+          <li><strong>Recommendations are explainable.</strong> Route matching and ranking use deterministic rules, not a trained ML model or LLM.</li>
+        </ul>
+        <button className="primary-button" type="button" onClick={onClose} autoFocus>Close</button>
+      </section>
+    </div>
+  );
+}
+
+function Header({ scenario, onMode, onCompare, onProfile, isLoading }: {
   scenario: Scenario;
   onMode: (mode: "live" | Scenario["id"]) => void;
+  onCompare: () => void;
+  onProfile: () => void;
   isLoading: boolean;
 }) {
   return (
@@ -94,15 +122,15 @@ function Header({ scenario, onMode, isLoading }: {
           <button className="scenario-button" onClick={() => onMode("live")} disabled={isLoading} aria-label="Run live morning check">
             <RefreshCw size={15} /><span>{isLoading ? "Loading" : "Live check"}</span>
           </button>
-          <button className="avatar" aria-label="Open Rachel's profile">R</button>
+          <button className="avatar" type="button" onClick={onProfile} aria-label="Open Rachel's routine profile">R</button>
         </div>
       </header>
       {scenario.isReplay && scenario.conditions.length > 0 && (
-        <div className="advisory" role="status">
+        <button type="button" className="advisory" onClick={onCompare} aria-label="Review disruption impact and route alternatives">
           <AlertTriangle size={18} aria-hidden="true" />
-          <div><strong>{scenario.conditions[0]?.title}</strong><span>Updated {scenario.updatedAt}</span></div>
+          <span className="advisory-copy"><strong>{scenario.conditions[0]?.title}</strong><span>Updated {scenario.updatedAt}</span></span>
           <ChevronRight size={18} aria-hidden="true" />
-        </div>
+        </button>
       )}
     </>
   );
@@ -158,7 +186,7 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
       </article>
 
       <section className="section-block">
-        <div className="section-heading"><div><span>ROUTE OVERVIEW</span><h2>Tampines to Raffles Place</h2></div><button aria-label="More route options"><Menu size={19} /></button></div>
+        <div className="section-heading"><div><span>ROUTE OVERVIEW</span><h2>Tampines to Raffles Place</h2></div><button type="button" onClick={onCompare} aria-label="Compare route options"><Menu size={19} /></button></div>
         <RouteMap usual={scenario.usualJourney} recommended={scenario.recommendedJourney} affectedSegments={plan.affectedSegments} compact />
         <div className="route-summary">
           <div><TrainFront size={19} /><span>{recommendation.lineId}<small>{recommendation.lineDetail}</small></span></div>
@@ -300,6 +328,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
   const [decisionMessage, setDecisionMessage] = useState<string>();
   const [demandBusy, setDemandBusy] = useState(false);
   const [acceptedJourney, setAcceptedJourney] = useState<Journey>();
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const persistPlan = async (nextPlan: JourneyPlanView, selectedJourneyId?: string) => {
     setPersistence("saving");
@@ -473,18 +502,37 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     }
   };
 
+  const showComparison = () => {
+    setScreen("compare");
+    setAnnouncement("Route comparison opened.");
+  };
+
+  const openRoutineProfile = () => {
+    setScreen("today");
+    setAnnouncement("Rachel's saved routine opened.");
+    window.setTimeout(() => {
+      const editor = document.querySelector<HTMLDetailsElement>("#routine-editor");
+      if (!editor) return;
+      editor.open = true;
+      editor.scrollIntoView({ behavior: "smooth", block: "start" });
+      editor.querySelector<HTMLElement>("summary")?.focus();
+    }, 0);
+  };
+
   return (
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <GovernmentBanner />
-      <Header scenario={scenario} onMode={changeMode} isLoading={isScenarioLoading || demandBusy || booting} />
+      <GovernmentBanner onAbout={() => setAboutOpen(true)} />
+      <Header scenario={scenario} onMode={changeMode} onCompare={showComparison} onProfile={openRoutineProfile}
+        isLoading={isScenarioLoading || demandBusy || booting} />
+      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
       {booting && <div className="offline-banner" role="status"><RefreshCw size={16} />Loading saved journey...</div>}
       {!online && <div className="offline-banner" role="status"><CloudOff size={16} />Offline · {storedSnapshot ? "showing your saved journey" : "no saved journey is available"}</div>}
       {cached && <div className="decision-banner" role="status"><CloudOff size={16} />Cached device data · {freshness === "fresh" ? "within provider validity" : freshness}</div>}
       {serviceError && <div className="service-error" role="alert"><AlertTriangle size={16} />{serviceError}</div>}
       {decisionMessage && <div className="decision-banner" role="status"><Radio size={16} />{decisionMessage}</div>}
       <div className="live-region" aria-live="polite">{announcement}</div>
-      {screen === "today" && <TodayScreen plan={plan} onCompare={() => setScreen("compare")} onUse={() => selectRoute()} />}
+      {screen === "today" && <TodayScreen plan={plan} onCompare={showComparison} onUse={() => selectRoute()} />}
       {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} onUse={selectRoute} />}
       {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} persistence={persistence} />}
       {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
