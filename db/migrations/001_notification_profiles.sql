@@ -29,7 +29,7 @@ create table if not exists evaluation_profiles (
   updated_at timestamptz not null default now(),
   constraint evaluation_profiles_deadline_check check (arrival_deadline > departure_time),
   constraint evaluation_profiles_places_check check (origin_lat <> destination_lat or origin_lng <> destination_lng),
-  constraint evaluation_profiles_weekdays_check check (weekdays <@ array[0,1,2,3,4,5,6]::smallint[])
+  constraint evaluation_profiles_weekday_values_check check (weekdays <@ array[0,1,2,3,4,5,6]::smallint[])
 );
 
 create table if not exists notification_decisions (

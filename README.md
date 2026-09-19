@@ -1,5 +1,4 @@
 # Smart Commuter Companion
-
 The current slice includes Today, Compare and Journey views, a real OSM-based map, fixture provider boundaries, affected-leg detection, a deterministic route recommendation, active-journey persistence and a production service worker. Live OneMap and DataMall credentials are not required yet; copy `.env.example` to `.env.local` when those adapters are added.
 
 ## Implementation tracker

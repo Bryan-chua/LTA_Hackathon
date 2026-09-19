@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Accessibility,
   AlertTriangle,
   ArrowRight,
   BriefcaseBusiness,
@@ -22,7 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { AffectedSegment, Alternative, CrowdingLevel, Journey, Scenario } from "@/lib/domain";
+import type { AffectedSegment, Alternative, BusArrivalInfo, BusLoadCode, CrowdingLevel, Journey, JourneyLeg, Scenario, TravelMode } from "@/lib/domain";
 import { requestJourneyPlan, requestMorningCheck, requestParticipation } from "@/lib/application/journey-api-client";
 import type { JourneyPlanView } from "@/lib/application/journey-view-model";
 import { RouteMap } from "./route-map";
@@ -59,21 +60,52 @@ function BrandMark() {
   );
 }
 
-function GovernmentBanner() {
+function GovernmentBanner({ onAbout }: { onAbout: () => void }) {
   return (
     <div className="government-banner">
       <ShieldCheck size={13} aria-hidden="true" />
       <span>Hackathon concept · Unofficial commuter demo</span>
-      <button aria-label="About this concept"><Info size={13} /></button>
+      <button type="button" onClick={onAbout} aria-label="About this concept"><Info size={13} /></button>
     </div>
   );
 }
 
-function Header({ scenario, onMode, isLoading }: {
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="concept-dialog" role="dialog" aria-modal="true" aria-labelledby="concept-dialog-title">
+        <span className="dialog-eyebrow">ABOUT THIS CONCEPT</span>
+        <h2 id="concept-dialog-title">A proactive companion for Rachel&apos;s commute</h2>
+        <p>Smart Commute checks a saved Tampines-to-Raffles Place routine and recommends a clear action only when conditions materially affect the trip.</p>
+        <ul>
+          <li><strong>Live and replay stay distinct.</strong> Provider freshness and labelled judging fixtures are never mixed silently.</li>
+          <li><strong>Privacy is device-first.</strong> Address labels and saved journeys stay in IndexedDB unless Rachel explicitly enables alerts.</li>
+          <li><strong>Recommendations are explainable.</strong> Route matching and ranking use deterministic rules, not a trained ML model or LLM.</li>
+        </ul>
+        <button className="primary-button" type="button" onClick={onClose} autoFocus>Close</button>
+      </section>
+    </div>
+  );
+}
+
+function Header({ scenario, travelMode, onMode, onTravelMode, onCompare, onProfile, isLoading }: {
   scenario: Scenario;
+  travelMode: TravelMode;
   onMode: (mode: "live" | Scenario["id"]) => void;
+  onTravelMode: (mode: TravelMode) => void;
+  onCompare: () => void;
+  onProfile: () => void;
   isLoading: boolean;
 }) {
+  const accessible = travelMode === "accessible";
   return (
     <>
       <header className="brand-header">
@@ -82,6 +114,11 @@ function Header({ scenario, onMode, isLoading }: {
           <div><strong>Smart Commute</strong><small>Hackathon concept</small></div>
         </div>
         <div className="header-actions">
+          <button type="button" className="mode-toggle" aria-pressed={accessible} disabled={isLoading}
+            aria-label={accessible ? "Accessible travel mode on. Switch to standard." : "Standard travel mode. Switch to accessible."}
+            onClick={() => onTravelMode(accessible ? "standard" : "accessible")}>
+            <Accessibility size={15} /><span aria-hidden="true">{accessible ? "Accessible" : "Standard"}</span>
+          </button>
           <label className="scenario-picker">
             <span className="sr-only">Data scenario</span>
             <select aria-label="Data scenario" value={scenario.id} disabled={isLoading}
@@ -94,15 +131,21 @@ function Header({ scenario, onMode, isLoading }: {
           <button className="scenario-button" onClick={() => onMode("live")} disabled={isLoading} aria-label="Run live morning check">
             <RefreshCw size={15} /><span>{isLoading ? "Loading" : "Live check"}</span>
           </button>
-          <button className="avatar" aria-label="Open Rachel's profile">R</button>
+          <button className="avatar" type="button" onClick={onProfile} aria-label="Open Rachel's routine profile">R</button>
         </div>
       </header>
-      {scenario.isReplay && scenario.conditions.length > 0 && (
-        <div className="advisory" role="status">
-          <AlertTriangle size={18} aria-hidden="true" />
-          <div><strong>{scenario.conditions[0]?.title}</strong><span>Updated {scenario.updatedAt}</span></div>
-          <ChevronRight size={18} aria-hidden="true" />
+      {accessible && (
+        <div className="accessible-mode-banner" role="status">
+          <Accessibility size={15} aria-hidden="true" />
+          <span>Accessible mode weights transfers and walking distance more heavily. Step-free access, lift status, and wheelchair-accessible buses are not verified for any route.</span>
         </div>
+      )}
+      {scenario.isReplay && scenario.conditions.length > 0 && (
+        <button type="button" className="advisory" onClick={onCompare} aria-label="Review disruption impact and route alternatives">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span className="advisory-copy"><strong>{scenario.conditions[0]?.title}</strong><span>Updated {scenario.updatedAt}</span></span>
+          <ChevronRight size={18} aria-hidden="true" />
+        </button>
       )}
     </>
   );
@@ -158,7 +201,7 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
       </article>
 
       <section className="section-block">
-        <div className="section-heading"><div><span>ROUTE OVERVIEW</span><h2>Tampines to Raffles Place</h2></div><button aria-label="More route options"><Menu size={19} /></button></div>
+        <div className="section-heading"><div><span>ROUTE OVERVIEW</span><h2>Tampines to Raffles Place</h2></div><button type="button" onClick={onCompare} aria-label="Compare route options"><Menu size={19} /></button></div>
         <RouteMap usual={scenario.usualJourney} recommended={scenario.recommendedJourney} affectedSegments={plan.affectedSegments} compact />
         <div className="route-summary">
           <div><TrainFront size={19} /><span>{recommendation.lineId}<small>{recommendation.lineDetail}</small></span></div>
@@ -183,7 +226,62 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
 
 const crowdingCopy: Record<CrowdingLevel, string> = { low: "Low", moderate: "Moderate", high: "High", unknown: "Unavailable" };
 
-function RouteOption({ option, affected, onUse }: { option: Alternative; affected: boolean; onUse: (journey: Journey) => void }) {
+// LTA v3/BusArrival vehicle-load codes. Describes the bus only — never shown as MRT crowding.
+const busLoadCopy: Record<BusLoadCode, string> = { SEA: "Seats available", SDA: "Standing available", LSD: "Limited standing" };
+
+const providerTime = (value?: string) => value
+  ? new Date(value).toLocaleTimeString("en-SG", { timeZone: "Asia/Singapore", hour12: false, hour: "2-digit", minute: "2-digit" })
+  : undefined;
+
+function AccessibilityUnverifiedNote() {
+  return (
+    <small className="bus-arrival__accessibility">
+      <Accessibility size={12} aria-hidden="true" /> Accessibility: Unverified — not confirmed wheelchair- or step-free-accessible
+    </small>
+  );
+}
+
+function BusArrivalSummary({ arrival, accessibleMode }: { arrival: BusArrivalInfo; accessibleMode?: boolean }) {
+  if (arrival.status !== "available") {
+    return (
+      <div className="bus-arrival bus-arrival--unavailable">
+        <BusFront size={16} />
+        <span>
+          <strong>Bus {arrival.serviceNo ?? ""} arrival unavailable</strong>
+          <small>{arrival.reason ?? "No current data from LTA DataMall."}</small>
+          {accessibleMode && <AccessibilityUnverifiedNote />}
+        </span>
+      </div>
+    );
+  }
+  const updated = providerTime(arrival.observedAt);
+  return (
+    <div className="bus-arrival">
+      <BusFront size={16} />
+      <span>
+        <strong>Bus {arrival.serviceNo} in {arrival.etaMinutes} min</strong>
+        <small>Bus load: {arrival.load ? busLoadCopy[arrival.load] : "Unavailable"}{updated ? ` · Updated ${updated} SGT` : ""}</small>
+        {accessibleMode && <AccessibilityUnverifiedNote />}
+      </span>
+    </div>
+  );
+}
+
+const NO_DATA_ARRIVAL: BusArrivalInfo = { status: "unavailable", reason: "No live arrival data was fetched for this leg." };
+
+function BusLegArrivals({ legs, accessibleMode }: { legs: JourneyLeg[]; accessibleMode?: boolean }) {
+  const busLegs = legs.filter((leg) => leg.mode === "bus");
+  if (busLegs.length === 0) return null;
+  return (
+    <div className="bus-arrival-list">
+      {busLegs.map((leg) => (
+        <BusArrivalSummary key={leg.id} arrival={leg.busArrival ?? { ...NO_DATA_ARRIVAL, serviceNo: leg.lineId }} accessibleMode={accessibleMode} />
+      ))}
+    </div>
+  );
+}
+
+function RouteOption({ option, affected, accessibleMode, onUse }: { option: Alternative; affected: boolean; accessibleMode: boolean; onUse: (journey: Journey) => void }) {
   const { journey } = option;
   return (
     <article className={`route-option ${option.recommended ? "route-option--recommended" : "route-option--affected"}`}>
@@ -207,6 +305,7 @@ function RouteOption({ option, affected, onUse }: { option: Alternative; affecte
         <div><GitCompareArrows size={17} /><span>Transfers<strong>{option.transfers}</strong></span></div>
         <div><Users size={17} /><span>Crowding<strong>{crowdingCopy[option.crowding]}</strong></span></div>
       </div>
+      <BusLegArrivals legs={journey.legs} accessibleMode={accessibleMode} />
       <details className="score-breakdown" open={option.recommended}>
         <summary><span>Why this score</span><small>{option.score}/100 · lower is better</small></summary>
         <ul>
@@ -223,12 +322,20 @@ function RouteOption({ option, affected, onUse }: { option: Alternative; affecte
   );
 }
 
-function CompareScreen({ scenario, alternatives, onUse }: { scenario: Scenario; alternatives: Alternative[]; onUse: (journey: Journey) => void }) {
+function CompareScreen({ scenario, alternatives, travelMode, onUse }: { scenario: Scenario; alternatives: Alternative[]; travelMode: TravelMode; onUse: (journey: Journey) => void }) {
+  const accessibleMode = travelMode === "accessible";
   return (
     <main id="main-content" className="screen">
       <section className="page-intro"><span>ROUTE COMPARISON</span><h1>Choose your best way in</h1><p>Compared against your 8:45 arrival deadline.</p></section>
-      {alternatives.map((option) => <RouteOption key={option.id} option={option} affected={scenario.conditions.length > 0 && option.journey.id === scenario.usualJourney.id} onUse={onUse} />)}
-      <section className="comparison-note"><Info size={18} /><p><strong>How we compare</strong>Arrival reliability, walking, transfers and crowding are scored for Rachel&apos;s saved routine.</p></section>
+      {alternatives.map((option) => (
+        <RouteOption key={option.id} option={option} affected={scenario.conditions.length > 0 && option.journey.id === scenario.usualJourney.id}
+          accessibleMode={accessibleMode} onUse={onUse} />
+      ))}
+      <section className="comparison-note">
+        <Info size={18} />
+        <p><strong>How we compare</strong>Arrival reliability, walking, transfers and crowding are scored for Rachel&apos;s saved routine.
+          {accessibleMode && " Accessible mode weights transfers and walking more heavily; it does not filter or verify accessibility."}</p>
+      </section>
     </main>
   );
 }
@@ -239,12 +346,14 @@ function StepIcon({ mode }: { mode: Journey["legs"][number]["mode"] }) {
   return <TrainFront size={18} />;
 }
 
-function JourneyScreen({ scenario, activeJourney, affectedSegments, persistence }: {
+function JourneyScreen({ scenario, activeJourney, affectedSegments, persistence, travelMode }: {
   scenario: Scenario;
   activeJourney: Journey;
   affectedSegments: AffectedSegment[];
   persistence: "saving" | "saved" | "unavailable";
+  travelMode: TravelMode;
 }) {
+  const accessibleMode = travelMode === "accessible";
   const firstLeg = activeJourney.legs[0];
   const firstTransit = activeJourney.legs.find((leg) => leg.mode === "rail" || leg.mode === "bus");
   return (
@@ -271,7 +380,13 @@ function JourneyScreen({ scenario, activeJourney, affectedSegments, persistence 
           {activeJourney.legs.map((leg, index) => (
             <li key={leg.id} className={affectedSegments.some(({ firstLegIndex, lastLegIndex }) => index >= firstLegIndex && index <= lastLegIndex) && activeJourney.id === scenario.usualJourney.id ? "timeline-step--affected" : ""}>
               <div className="step-icon"><StepIcon mode={leg.mode} /></div>
-              <div><strong>{leg.instruction}</strong><span>{leg.from.shortName} to {leg.to.shortName} · {leg.durationMinutes} min</span></div>
+              <div>
+                <strong>{leg.instruction}</strong>
+                <span>{leg.from.shortName} to {leg.to.shortName} · {leg.durationMinutes} min</span>
+                {leg.mode === "bus" && (
+                  <BusArrivalSummary arrival={leg.busArrival ?? { ...NO_DATA_ARRIVAL, serviceNo: leg.lineId }} accessibleMode={accessibleMode} />
+                )}
+              </div>
             </li>
           ))}
           <li><div className="step-icon step-icon--destination"><BriefcaseBusiness size={18} /></div><div><strong>Arrive at the office</strong><span>Expected {activeJourney.arrival.p50}</span></div></li>
@@ -300,6 +415,8 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
   const [decisionMessage, setDecisionMessage] = useState<string>();
   const [demandBusy, setDemandBusy] = useState(false);
   const [acceptedJourney, setAcceptedJourney] = useState<Journey>();
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [travelMode, setTravelModeState] = useState<TravelMode>("standard");
 
   const persistPlan = async (nextPlan: JourneyPlanView, selectedJourneyId?: string) => {
     setPersistence("saving");
@@ -313,10 +430,10 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     }
   };
 
-  const loadLive = async (announce = true) => {
+  const loadLive = async (announce = true, mode = travelMode) => {
     if (!navigator.onLine) throw new Error("You are offline. Showing the saved journey.");
     const routine = await loadRoutine();
-    const nextPlan = await requestMorningCheck(routine);
+    const nextPlan = await requestMorningCheck(routine, mode);
     const changed = plan.recommendation.journeyId !== nextPlan.recommendation.journeyId;
     setPlan(nextPlan);
     setCached(false);
@@ -436,7 +553,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
   const refreshDemand = async (profile: DemandProfile) => {
     setDemandBusy(true);
     try {
-      setPlan(await requestJourneyPlan(scenario.id, profile));
+      setPlan(await requestJourneyPlan(scenario.id, profile, travelMode));
       setDemandMessage("Projection updated. Any active journey remains unchanged until you choose another route.");
     } catch { setDemandMessage("Refresh failed. Showing the previous projection; it may be stale. Try again when connected."); }
     finally { setDemandBusy(false); }
@@ -456,7 +573,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     setIsScenarioLoading(true);
     setServiceError(undefined);
     try {
-      const nextPlan = mode === "live" ? await loadLive() : await requestJourneyPlan(mode, plan.demand?.profile);
+      const nextPlan = mode === "live" ? await loadLive() : await requestJourneyPlan(mode, plan.demand?.profile, travelMode);
       setPlan(nextPlan);
       setCached(false);
       if (mode !== "live") await persistPlan(nextPlan);
@@ -473,20 +590,60 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
     }
   };
 
+  const changeTravelMode = async (mode: TravelMode) => {
+    setTravelModeState(mode);
+    setIsScenarioLoading(true);
+    setServiceError(undefined);
+    try {
+      const nextPlan = plan.dataMode === "live"
+        ? await loadLive(false, mode)
+        : await requestJourneyPlan(scenario.id, plan.demand?.profile, mode);
+      setPlan(nextPlan);
+      setCached(false);
+      if (plan.dataMode !== "live") await persistPlan(nextPlan, activeJourneyId);
+      setAnnouncement(`${mode === "accessible" ? "Accessible" : "Standard"} travel mode applied.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update travel mode.";
+      setServiceError(message);
+      setAnnouncement(message);
+    } finally {
+      setIsScenarioLoading(false);
+    }
+  };
+
+  const showComparison = () => {
+    setScreen("compare");
+    setAnnouncement("Route comparison opened.");
+  };
+
+  const openRoutineProfile = () => {
+    setScreen("today");
+    setAnnouncement("Rachel's saved routine opened.");
+    window.setTimeout(() => {
+      const editor = document.querySelector<HTMLDetailsElement>("#routine-editor");
+      if (!editor) return;
+      editor.open = true;
+      editor.scrollIntoView({ behavior: "smooth", block: "start" });
+      editor.querySelector<HTMLElement>("summary")?.focus();
+    }, 0);
+  };
+
   return (
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <GovernmentBanner />
-      <Header scenario={scenario} onMode={changeMode} isLoading={isScenarioLoading || demandBusy || booting} />
+      <GovernmentBanner onAbout={() => setAboutOpen(true)} />
+      <Header scenario={scenario} travelMode={travelMode} onMode={changeMode} onTravelMode={changeTravelMode} onCompare={showComparison} onProfile={openRoutineProfile}
+        isLoading={isScenarioLoading || demandBusy || booting} />
+      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
       {booting && <div className="offline-banner" role="status"><RefreshCw size={16} />Loading saved journey...</div>}
       {!online && <div className="offline-banner" role="status"><CloudOff size={16} />Offline · {storedSnapshot ? "showing your saved journey" : "no saved journey is available"}</div>}
       {cached && <div className="decision-banner" role="status"><CloudOff size={16} />Cached device data · {freshness === "fresh" ? "within provider validity" : freshness}</div>}
       {serviceError && <div className="service-error" role="alert"><AlertTriangle size={16} />{serviceError}</div>}
       {decisionMessage && <div className="decision-banner" role="status"><Radio size={16} />{decisionMessage}</div>}
       <div className="live-region" aria-live="polite">{announcement}</div>
-      {screen === "today" && <TodayScreen plan={plan} onCompare={() => setScreen("compare")} onUse={() => selectRoute()} />}
-      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} onUse={selectRoute} />}
-      {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} persistence={persistence} />}
+      {screen === "today" && <TodayScreen plan={plan} onCompare={showComparison} onUse={() => selectRoute()} />}
+      {screen === "compare" && <CompareScreen scenario={scenario} alternatives={plan.alternatives} travelMode={travelMode} onUse={selectRoute} />}
+      {screen === "journey" && <JourneyScreen scenario={scenario} activeJourney={activeJourney} affectedSegments={plan.affectedSegments} persistence={persistence} travelMode={travelMode} />}
       {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
         busy={demandBusy || isScenarioLoading} online={online} message={demandMessage}
         onRefresh={refreshDemand} onParticipation={updateParticipation} />}

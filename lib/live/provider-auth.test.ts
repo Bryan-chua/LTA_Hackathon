@@ -10,19 +10,23 @@ const originalDataMallKey = process.env.LTA_DATAMALL_ACCOUNT_KEY;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  process.env.LIVE_PROVIDERS_ENABLED = originalLiveEnabled;
-  process.env.ONEMAP_ACCESS_TOKEN = originalOneMapToken;
-  process.env.LTA_DATAMALL_ACCOUNT_KEY = originalDataMallKey;
+  if (originalLiveEnabled === undefined) delete process.env.LIVE_PROVIDERS_ENABLED;
+  else process.env.LIVE_PROVIDERS_ENABLED = originalLiveEnabled;
+  if (originalOneMapToken === undefined) delete process.env.ONEMAP_ACCESS_TOKEN;
+  else process.env.ONEMAP_ACCESS_TOKEN = originalOneMapToken;
+  if (originalDataMallKey === undefined) delete process.env.LTA_DATAMALL_ACCOUNT_KEY;
+  else process.env.LTA_DATAMALL_ACCOUNT_KEY = originalDataMallKey;
 });
 
 describe("live provider contracts", () => {
-  it("reads the configured OneMap access token without password authentication", () => {
+  it("reads the configured OneMap access token without password authentication", async () => {
     process.env.LIVE_PROVIDERS_ENABLED = "true";
     process.env.ONEMAP_ACCESS_TOKEN = "current-token";
-    assert.equal(oneMapToken(), "current-token");
+    assert.equal(await oneMapToken(), "current-token");
   });
 
   it("accepts the current TrainServiceAlerts object envelope", async () => {
+    process.env.LIVE_PROVIDERS_ENABLED = "true";
     process.env.LTA_DATAMALL_ACCOUNT_KEY = "test-key";
     globalThis.fetch = async () => Response.json({
       value: { Status: 1, AffectedSegments: [], Message: [{ Content: "Normal service" }] },
@@ -32,6 +36,7 @@ describe("live provider contracts", () => {
   });
 
   it("normalizes nested PCDForecast station intervals", async () => {
+    process.env.LIVE_PROVIDERS_ENABLED = "true";
     process.env.LTA_DATAMALL_ACCOUNT_KEY = "test-key";
     globalThis.fetch = async () => Response.json({
       value: [{
@@ -44,5 +49,17 @@ describe("live provider contracts", () => {
     });
     const result = await crowdingForLine("EWL", "forecast", new Date("2026-09-19T00:05:00.000Z"));
     assert.equal(result.data.get("EW1"), "high");
+  });
+
+  it("uses the crowd-density line code for Sengkang LRT", async () => {
+    process.env.LIVE_PROVIDERS_ENABLED = "true";
+    process.env.LTA_DATAMALL_ACCOUNT_KEY = "test-key";
+    let requested = "";
+    globalThis.fetch = async (input) => {
+      requested = String(input);
+      return Response.json({ value: [] });
+    };
+    await crowdingForLine("STL", "realtime", new Date("2026-09-19T00:05:00.000Z"));
+    assert.equal(new URL(requested).searchParams.get("TrainLine"), "SLRT");
   });
 });

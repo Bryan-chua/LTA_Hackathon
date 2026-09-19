@@ -14,6 +14,7 @@ describe("demand projection", () => {
     const tied = scoreJourneyCandidates(usual, [{ ...usual, id: "same-cost-alternative" }], "08:45", [], {
       deadlineRisk: 1, expectedArrivalPenalty: 0, uncertaintyPenalty: 0, transferPenalty: 0,
       walkingAndRainPenalty: 0, crowdingPenalty: 0, routeChangePenalty: 0,
+      busWaitPenalty: 0, busLoadPenalty: 0,
     });
     assert.equal(tied.filter((option) => option.recommended).length, 1);
     assert.equal(tied.find((option) => option.recommended)!.journey.id, usual.id);

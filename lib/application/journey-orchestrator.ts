@@ -1,6 +1,7 @@
-import type { Alternative, Journey, Scenario } from "../domain";
+import type { Alternative, Journey, Scenario, TravelMode } from "../domain";
 import { scenarios } from "../fixtures";
 import { buildAlternatives, findAffectedSegments } from "../journey-engine";
+import { ACCESSIBLE_SCORE_WEIGHTS, RACHEL_SCORE_WEIGHTS } from "../journey-scoring";
 import { FixtureRoutingProvider, type RoutingProvider } from "../providers";
 import type {
   JourneyComparisonView,
@@ -10,6 +11,9 @@ import type {
   RecommendationView,
 } from "./journey-view-model";
 import { projectDemand } from "../demand-flow";
+
+export const scoreWeightsFor = (travelMode?: TravelMode) =>
+  travelMode === "accessible" ? ACCESSIBLE_SCORE_WEIGHTS : RACHEL_SCORE_WEIGHTS;
 
 export class JourneyNotFoundError extends Error {
   constructor(journeyId: string) {
@@ -94,7 +98,7 @@ export class JourneyOrchestrator {
       usualJourney,
       recommendedJourney: journeys[1],
     };
-    const evaluation = this.evaluateScenario(scenario, usualJourney.id, journeys.slice(1));
+    const evaluation = this.evaluateScenario(scenario, usualJourney.id, journeys.slice(1), scoreWeightsFor(command.travelMode));
     const selected = evaluation.alternatives.find((option) => option.recommended)?.journey;
     scenario.recommendedJourney = selected?.id !== usualJourney.id ? selected : undefined;
     if (selected?.id === "relief-tel-route") {
@@ -124,12 +128,18 @@ export class JourneyOrchestrator {
     return { journeyId, scenarioId, alternatives: plan.alternatives };
   }
 
-  private evaluateScenario(scenario: Scenario, journeyId: string, candidates?: Journey[]): JourneyEvaluationView {
+  private evaluateScenario(
+    scenario: Scenario,
+    journeyId: string,
+    candidates?: Journey[],
+    weights = RACHEL_SCORE_WEIGHTS,
+  ): JourneyEvaluationView {
     const alternatives = buildAlternatives(
       scenario.usualJourney,
       candidates ?? scenario.recommendedJourney,
       scenario.routine.arrivalDeadline,
       scenario.conditions,
+      weights,
     );
     return {
       journeyId,

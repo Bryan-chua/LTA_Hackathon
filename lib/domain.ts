@@ -1,6 +1,9 @@
 import type { DemandForecast } from "./demand-flow";
 
 export type Mode = "walk" | "rail" | "bus" | "cycle";
+// "accessible" reweights scoring toward transfers/walking; it is not step-free routing
+// and never claims verified accessibility (see BusArrivalInfo and WRITEUP.md).
+export type TravelMode = "standard" | "accessible";
 export type CrowdingLevel = "low" | "moderate" | "high" | "unknown";
 export type DataMode = "live" | "replay";
 export type ProviderMode = "live" | "forecast" | "replay" | "cached";
@@ -32,6 +35,23 @@ export interface ArrivalRange {
   latest: string;
 }
 
+// LTA v3/BusArrival vehicle-load codes: Seats Available, Standing Available, Limited Standing.
+// These describe the physical bus only, never MRT station crowding.
+export type BusLoadCode = "SEA" | "SDA" | "LSD";
+
+export interface BusArrivalInfo {
+  status: "available" | "unavailable";
+  serviceNo?: string;
+  boardingStopCode?: string;
+  alightingStopCode?: string;
+  etaMinutes?: number;
+  load?: BusLoadCode;
+  observedAt?: string;
+  staleAt?: string;
+  reason?: string;
+  provider?: ProviderMetadata;
+}
+
 export interface JourneyLegGeometrySection {
   id: string;
   fromStationCode?: string;
@@ -54,6 +74,7 @@ export interface JourneyLeg {
   crowding?: CrowdingLevel;
   geometry: Coordinate[];
   geometrySections?: JourneyLegGeometrySection[];
+  busArrival?: BusArrivalInfo;
 }
 
 export interface Journey {
@@ -105,7 +126,9 @@ export type ScoreComponentKey =
   | "transferPenalty"
   | "walkingAndRainPenalty"
   | "crowdingPenalty"
-  | "routeChangePenalty";
+  | "routeChangePenalty"
+  | "busWaitPenalty"
+  | "busLoadPenalty";
 
 export interface ScoreComponentDetail {
   key: ScoreComponentKey;
@@ -122,6 +145,31 @@ export interface ScoreBreakdown {
   components: ScoreComponentDetail[];
 }
 
+export interface ReliabilityReason {
+  code: string;
+  label: string;
+  direction: "helps" | "hurts";
+  contribution?: number;
+  source: string;
+}
+
+export interface JourneyReliabilityForecast {
+  method: "model" | "synthetic_model" | "deterministic_fallback";
+  modelVersion?: string;
+  synthetic: boolean;
+  probabilityBeforeDeadline?: number;
+  p50Arrival: string;
+  p90Arrival?: string;
+  likelyArrival: { from: string; to: string };
+  reasons: ReliabilityReason[];
+  confidence: "high" | "medium" | "low";
+  freshness: ProviderMode | "stale";
+  dataCompleteness: number;
+  fallbackReason?: "model_unavailable" | "stale_critical_data" | "insufficient_similar_journeys"
+    | "unsupported_route" | "schema_mismatch";
+  observationId?: string;
+}
+
 export interface Alternative {
   id: string;
   journey: Journey;
@@ -132,6 +180,7 @@ export interface Alternative {
   transfers: number;
   crowding: CrowdingLevel;
   scoreBreakdown: ScoreBreakdown;
+  reliability: JourneyReliabilityForecast;
 }
 
 export interface AffectedSegment {

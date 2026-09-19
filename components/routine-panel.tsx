@@ -224,7 +224,7 @@ export function RoutinePanel({ onPlan }: Props) {
   return (
     <section className="routine-panel" aria-labelledby="routine-title">
       <div className="section-heading"><div><span>MY ROUTINE</span><h2 id="routine-title">Morning commute</h2></div></div>
-      <details>
+      <details id="routine-editor">
         <summary>Edit saved routine</summary>
         {(["origin", "destination"] as const).map((kind) => (
           <div className="routine-search" key={kind}>

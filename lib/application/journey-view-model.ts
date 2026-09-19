@@ -1,4 +1,4 @@
-import type { AffectedSegment, Alternative, CrowdingLevel, DataMode, Journey, ProviderMode, Scenario } from "../domain";
+import type { AffectedSegment, Alternative, CrowdingLevel, DataMode, Journey, ProviderMode, Scenario, TravelMode } from "../domain";
 import type { DemandProfile, DemandView } from "../demand-flow";
 
 export interface RecommendationView {
@@ -48,6 +48,7 @@ export interface PlanJourneyCommand {
   scenarioId?: Scenario["id"];
   routine?: Scenario["routine"];
   demand?: { profile: DemandProfile; selections: readonly string[] };
+  travelMode?: TravelMode;
 }
 
 export interface ApiSuccess<T> {

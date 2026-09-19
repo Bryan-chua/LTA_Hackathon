@@ -35,4 +35,19 @@ describe("journey orchestrator", () => {
     const evaluation = await orchestrator.evaluate("recommended-dtl-route", "ewl-disruption");
     assert.deepEqual(evaluation.affectedSegments, []);
   });
+
+  it("applies the accessible-mode weighting when requested, without changing the factors scored", async () => {
+    const standard = await orchestrator.plan({ scenarioId: "ewl-disruption" });
+    const accessible = await orchestrator.plan({ scenarioId: "ewl-disruption", travelMode: "accessible" });
+
+    const weightFor = (plan: typeof standard, key: string) =>
+      plan.alternatives[0]!.scoreBreakdown.components.find((component) => component.key === key)!.weight;
+
+    assert.ok(weightFor(accessible, "transferPenalty") > weightFor(standard, "transferPenalty"));
+    assert.ok(weightFor(accessible, "walkingAndRainPenalty") > weightFor(standard, "walkingAndRainPenalty"));
+    assert.deepEqual(
+      accessible.alternatives[0]!.scoreBreakdown.components.map((component) => component.key).sort(),
+      standard.alternatives[0]!.scoreBreakdown.components.map((component) => component.key).sort(),
+    );
+  });
 });

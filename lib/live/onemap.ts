@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Coordinate, Journey, JourneyLeg, Mode, Place, Routine } from "../domain";
-import { ProviderError, providerMetadata, type ProviderResult } from "../provider-contracts";
+import { ProviderError, providerFetch, providerMetadata, type ProviderResult } from "../provider-contracts";
 import { assertLiveProvidersEnabled } from "./config";
 
 const BASE_URL = "https://www.onemap.gov.sg";
@@ -44,16 +44,79 @@ const routeSchema = z.object({
   }).passthrough(),
 }).passthrough();
 
-export function oneMapToken(): string {
+const tokenSchema = z.object({
+  access_token: z.string().min(1),
+  expiry_timestamp: z.coerce.number().positive(),
+}).passthrough();
+
+interface OneMapTokenCache {
+  token?: string;
+  expiresAt?: number;
+  pending?: Promise<string>;
+}
+
+const globalOneMap = globalThis as typeof globalThis & { smartCommuteOneMapToken?: OneMapTokenCache };
+const tokenCache = globalOneMap.smartCommuteOneMapToken ??= {};
+
+const hasManagedCredentials = () => Boolean(
+  process.env.ONEMAP_EMAIL?.trim() && process.env.ONEMAP_PASSWORD?.trim(),
+);
+
+async function requestOneMapToken(): Promise<string> {
+  const email = process.env.ONEMAP_EMAIL?.trim();
+  const password = process.env.ONEMAP_PASSWORD?.trim();
+  if (!email || !password) {
+    throw new ProviderError(
+      "OneMap",
+      "configuration",
+      "Configure ONEMAP_EMAIL and ONEMAP_PASSWORD, or provide a current ONEMAP_ACCESS_TOKEN.",
+    );
+  }
+
+  const response = await providerFetch("OneMap authentication", new URL("/api/auth/post/getToken", BASE_URL), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const parsed = tokenSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    throw new ProviderError("OneMap", "invalid_response", "OneMap authentication returned an invalid response.");
+  }
+  tokenCache.token = parsed.data.access_token;
+  tokenCache.expiresAt = parsed.data.expiry_timestamp * 1000;
+  return parsed.data.access_token;
+}
+
+export async function oneMapToken(forceRefresh = false): Promise<string> {
   assertLiveProvidersEnabled();
   const token = process.env.ONEMAP_ACCESS_TOKEN?.trim();
-  if (!token) throw new ProviderError("OneMap", "configuration", "ONEMAP_ACCESS_TOKEN is not configured.");
-  return token;
+  if (token) return token;
+
+  const refreshAt = (tokenCache.expiresAt ?? 0) - 5 * 60_000;
+  if (!forceRefresh && tokenCache.token && Date.now() < refreshAt) return tokenCache.token;
+  if (!forceRefresh && tokenCache.pending) return tokenCache.pending;
+
+  const pending = requestOneMapToken().finally(() => {
+    if (tokenCache.pending === pending) tokenCache.pending = undefined;
+  });
+  tokenCache.pending = pending;
+  return pending;
 }
 
 async function authorizedFetch(url: URL): Promise<Response> {
-  const token = oneMapToken();
-  const response = await fetch(url, { headers: { Authorization: token }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+  const makeRequest = async (token: string) => fetch(url, {
+    headers: { Authorization: token },
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  let token = await oneMapToken();
+  let response = await makeRequest(token);
+  if ((response.status === 401 || response.status === 403) && hasManagedCredentials() && !process.env.ONEMAP_ACCESS_TOKEN?.trim()) {
+    tokenCache.token = undefined;
+    tokenCache.expiresAt = undefined;
+    token = await oneMapToken(true);
+    response = await makeRequest(token);
+  }
   if (response.status === 401 || response.status === 403) throw new ProviderError("OneMap", "authentication", "OneMap rejected its credentials.");
   if (response.status === 429) throw new ProviderError("OneMap", "rate_limit", "OneMap rate limit reached.", true);
   if (!response.ok) throw new ProviderError("OneMap", "unavailable", `OneMap returned HTTP ${response.status}.`, response.status >= 500);
