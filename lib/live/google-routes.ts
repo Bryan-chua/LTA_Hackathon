@@ -53,9 +53,9 @@ const responseSchema = z.object({
 
 export function googleRoutesApiKey(): string {
   assertLiveProvidersEnabled();
-  const key = process.env.GOOGLE_MAPS_ROUTES_API_KEY?.trim();
+  const key = process.env.GOOGLE_MAPS_ROUTES_API_KEY?.trim() || process.env.GOOGLE_MAPS_API_KEY?.trim();
   if (!key) {
-    throw new ProviderError("Google Routes", "configuration", "GOOGLE_MAPS_ROUTES_API_KEY is not configured.");
+    throw new ProviderError("Google Routes", "configuration", "GOOGLE_MAPS_ROUTES_API_KEY or GOOGLE_MAPS_API_KEY is not configured.");
   }
   return key;
 }
@@ -254,3 +254,4 @@ export class GoogleRoutesRoutingProvider {
   }
 }
 
+export class GoogleRoutesProvider extends GoogleRoutesRoutingProvider {}

@@ -59,8 +59,11 @@ export function RoutinePanel({ onPlan }: Props) {
     let active = true;
     const reconcile = async () => {
       if (navigator.onLine && await hasPendingServerDeletion()) {
-        const response = await fetch("/api/push/subscription", { method: "DELETE" });
-        if (response.ok) await setPendingServerDeletion(false);
+        const responses = await Promise.all([
+          fetch("/api/push/subscription", { method: "DELETE" }),
+          fetch("/api/reliability/consent", { method: "DELETE" }),
+        ]);
+        if (responses.every((response) => response.ok)) await setPendingServerDeletion(false);
       }
       const saved = await loadRoutine();
       if (active) setRoutine(saved);
@@ -191,7 +194,7 @@ export function RoutinePanel({ onPlan }: Props) {
   };
 
   const clearMyData = async () => {
-    if (!window.confirm("Clear this routine, saved journeys, and commute alerts from this device?")) return;
+    if (!window.confirm("Clear this routine, saved journeys, commute alerts, and reliability feedback?")) return;
     setBusy(true);
     try {
       localStorage.removeItem(PUSH_OPT_IN_KEY);
@@ -201,13 +204,16 @@ export function RoutinePanel({ onPlan }: Props) {
       }
       let serverDeleted = false;
       if (navigator.onLine) {
-        const response = await fetch("/api/push/subscription", { method: "DELETE" });
-        serverDeleted = response.ok;
+        const responses = await Promise.all([
+          fetch("/api/push/subscription", { method: "DELETE" }),
+          fetch("/api/reliability/consent", { method: "DELETE" }),
+        ]);
+        serverDeleted = responses.every((response) => response.ok);
       }
       await clearDeviceDatabase();
       if (!serverDeleted) await setPendingServerDeletion(true);
       setMessage(serverDeleted
-        ? "Routine, journeys, and notification data were deleted."
+        ? "Routine, journeys, notifications, and reliability feedback were deleted."
         : "Device data cleared. Server deletion will retry after reconnection.");
       window.location.reload();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Data could not be completely cleared."); }

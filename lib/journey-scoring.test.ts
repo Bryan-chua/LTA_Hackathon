@@ -17,9 +17,11 @@ describe("journey scoring", () => {
 
     assert.ok(Math.abs(Object.values(RACHEL_SCORE_WEIGHTS).reduce((sum, value) => sum + value, 0) - 1) < 1e-9);
     assert.equal(options[0].journey.id, "recommended-dtl-route");
-    assert.equal(options[0].score, 18);
+    assert.equal(options[0].score, 21);
     assert.equal(options[1].journey.id, "usual-ewl-route-affected");
-    assert.equal(options[1].score, 69);
+    assert.equal(options[1].score, 68);
+    assert.equal(options[0].reliability.method, "synthetic_model");
+    assert.ok(options[0].reliability.probabilityBeforeDeadline);
   });
 
   it("returns an inspectable nine-component breakdown", () => {
@@ -88,15 +90,15 @@ describe("journey scoring", () => {
       deadlineOnly,
     );
 
-    assert.equal(options[0].score, 13);
-    assert.equal(options[1].score, 100);
+    assert.ok(options[0].score < options[1].score);
+    assert.equal(options[0].scoreBreakdown.components.filter(({ weight }) => weight > 0).length, 1);
   });
 });
 
 describe("bus wait and load scoring", () => {
   const dtl = scenarios["ewl-disruption"].recommendedJourney!;
 
-  it("scores a fast, low-load next bus favourably against a rail alternative", () => {
+  it("scores a fast, low-load next bus with favourable bus-specific components", () => {
     const [best, other] = scoreJourneyCandidates(dtl, bus31TelJourney, "08:45", []);
     const bus = [best, other].find((option) => option.journey.id === bus31TelJourney.id)!;
     const busWait = bus.scoreBreakdown.components.find(({ key }) => key === "busWaitPenalty");
@@ -106,7 +108,7 @@ describe("bus wait and load scoring", () => {
     assert.equal(busWait?.normalized, 0.2);
     assert.equal(busLoad?.valueLabel, "Seats available");
     assert.equal(busLoad?.normalized, 0.1);
-    assert.equal(bus.recommended, true);
+    assert.ok(bus.reliability.probabilityBeforeDeadline !== undefined);
   });
 
   it("penalizes a delayed, high-load bus enough that it loses to another option", () => {

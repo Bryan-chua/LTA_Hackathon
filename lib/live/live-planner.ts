@@ -55,7 +55,9 @@ async function enrichCrowding(journeys: Journey[], now: Date): Promise<{ journey
 }
 
 export async function planLiveJourney(routine: Routine, now = new Date(), travelMode?: TravelMode): Promise<JourneyPlanView> {
-  const routingProvider = process.env.ROUTING_PROVIDER?.trim().toLowerCase() ?? "onemap";
+  const googleKey = process.env.GOOGLE_MAPS_ROUTES_API_KEY?.trim() || process.env.GOOGLE_MAPS_API_KEY?.trim();
+  const routingProvider = process.env.ROUTING_PROVIDER?.trim().toLowerCase()
+    || (!process.env.ONEMAP_ACCESS_TOKEN?.trim() && googleKey ? "google" : "onemap");
   if (routingProvider !== "onemap" && routingProvider !== "google") {
     throw new ProviderError("Routing", "configuration", "ROUTING_PROVIDER must be 'onemap' or 'google'.");
   }
