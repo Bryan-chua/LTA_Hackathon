@@ -3,11 +3,13 @@ import type {
   BusLoadCode,
   CrowdingLevel,
   Journey,
+  JourneyReliabilityForecast,
   ScoreBreakdown,
   ScoreComponentDetail,
   ScoreComponentKey,
   TravelCondition,
 } from "./domain";
+import { forecastJourneyReliability } from "./reliability-forecast";
 
 export type JourneyScoreWeights = Record<ScoreComponentKey, number>;
 
@@ -189,6 +191,26 @@ function deadlineRisk(journey: Journey, deadline: string) {
   };
 }
 
+function forecastDeadlineRisk(
+  journey: Journey,
+  deadline: string,
+  forecast: JourneyReliabilityForecast,
+) {
+  const deterministic = deadlineRisk(journey, deadline);
+  if (forecast.probabilityBeforeDeadline === undefined || forecast.method === "deterministic_fallback") {
+    return { ...deterministic, valueLabel: deterministic.normalized === 0
+      ? "Safely before deadline"
+      : deterministic.normalized === 1
+        ? `${deterministic.minutesAtRisk} min past deadline`
+        : `${deterministic.minutesAtRisk} min at risk` };
+  }
+  return {
+    normalized: 1 - forecast.probabilityBeforeDeadline,
+    minutesAtRisk: deterministic.minutesAtRisk,
+    valueLabel: `${Math.round(forecast.probabilityBeforeDeadline * 100)}% on-time estimate${forecast.synthetic ? " · synthetic" : ""}`,
+  };
+}
+
 function component(
   key: ScoreComponentKey,
   label: string,
@@ -211,6 +233,7 @@ function scoreJourney(
   journey: Journey,
   context: ScoreContext,
   weights: JourneyScoreWeights,
+  reliability: JourneyReliabilityForecast,
 ): { breakdown: ScoreBreakdown; metrics: CandidateMetrics } {
   const p50 = minutesSinceMidnight(journey.arrival.p50);
   const arrivalDelayMinutes = Math.max(0, p50 - context.bestArrivalMinutes);
@@ -220,7 +243,7 @@ function scoreJourney(
   const rainMultiplier = weatherMultiplier(context.conditions);
   const effectiveWalkingMinutes = Math.round(walkingMinutes * rainMultiplier);
   const crowding = worstCrowding(journey);
-  const risk = deadlineRisk(journey, context.deadline);
+  const risk = forecastDeadlineRisk(journey, context.deadline, reliability);
   const churn = routeChange(journey, context.baselineJourney);
   const busWait = worstBusWait(journey);
   const busLoad = worstBusLoad(journey);
@@ -229,7 +252,7 @@ function scoreJourney(
     component(
       "deadlineRisk",
       "Deadline risk",
-      risk.normalized === 0 ? "Safely before deadline" : risk.normalized === 1 ? `${risk.minutesAtRisk} min past deadline` : `${risk.minutesAtRisk} min at risk`,
+      risk.valueLabel,
       risk.normalized,
       weights,
     ),
@@ -332,14 +355,15 @@ export function scoreJourneyCandidates(
   };
 
   const scored = journeys.map((journey) => {
-    const { breakdown, metrics } = scoreJourney(journey, context, weights);
-    return { journey, breakdown, metrics };
+    const reliability = forecastJourneyReliability(journey, deadline, conditions);
+    const { breakdown, metrics } = scoreJourney(journey, context, weights, reliability);
+    return { journey, breakdown, metrics, reliability };
   });
   // Exactly one recommendation, even after rounded-score ties.
   const best = [...scored].sort((left, right) => left.breakdown.total - right.breakdown.total)[0];
 
   return scored
-    .map(({ journey, breakdown, metrics }): Alternative => {
+    .map(({ journey, breakdown, metrics, reliability }): Alternative => {
       const recommended = journey.id === best.journey.id;
       const changed = journey.id !== usual.id;
       return {
@@ -348,6 +372,7 @@ export function scoreJourneyCandidates(
         recommended,
         score: breakdown.total,
         scoreBreakdown: breakdown,
+        reliability,
         explanation: journey.demandForecast && journey.demandForecast.addedDelayMinutes > 0
           ? "Projected boarding demand adds waiting time. The arrival range includes this synthetic delay estimate."
           : recommended

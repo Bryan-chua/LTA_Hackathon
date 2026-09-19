@@ -30,6 +30,7 @@ import { RouteMap } from "./route-map";
 import { DemandPanel } from "./demand-panel";
 import type { DemandProfile } from "@/lib/demand-flow";
 import { RoutinePanel } from "./routine-panel";
+import { ReliabilityPanel } from "./reliability-panel";
 import { loadRoutine } from "@/lib/client/routine-store";
 import {
   consumeLegacyActiveJourney,
@@ -88,7 +89,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <ul>
           <li><strong>Live and replay stay distinct.</strong> Provider freshness and labelled judging fixtures are never mixed silently.</li>
           <li><strong>Privacy is device-first.</strong> Address labels and saved journeys stay in IndexedDB unless Rachel explicitly enables alerts.</li>
-          <li><strong>Recommendations are explainable.</strong> Route matching and ranking use deterministic rules, not a trained ML model or LLM.</li>
+          <li><strong>Reliability stays explainable.</strong> Replay can show a clearly labelled synthetic model; live journeys fall back to inspectable rules until a calibrated model is available. No LLM is used.</li>
         </ul>
         <button className="primary-button" type="button" onClick={onClose} autoFocus>Close</button>
       </section>
@@ -168,10 +169,40 @@ function Arrival({ journey, deadline }: { journey: Journey; deadline: string }) 
   );
 }
 
+function ReliabilityForecast({ option }: { option: Alternative }) {
+  const forecast = option.reliability;
+  return (
+    <section className="reliability-forecast" aria-label="Personalised Journey Reliability Forecast">
+      <div className="reliability-heading">
+        <div><span>PERSONALISED JOURNEY RELIABILITY</span><strong>
+          {forecast.probabilityBeforeDeadline === undefined
+            ? `Likely arrival ${forecast.likelyArrival.from}-${forecast.likelyArrival.to}`
+            : `${Math.round(forecast.probabilityBeforeDeadline * 100)}% likely before deadline`}
+        </strong></div>
+        {forecast.synthetic && <small className="synthetic-model-label">Synthetic model output</small>}
+      </div>
+      <div className="reliability-times">
+        <span>P50 <strong>{forecast.p50Arrival}</strong></span>
+        {forecast.p90Arrival && <span>P90 <strong>{forecast.p90Arrival}</strong></span>}
+        <span>Confidence <strong>{forecast.confidence}</strong></span>
+        <span>Freshness <strong>{forecast.freshness}</strong></span>
+      </div>
+      {forecast.method === "deterministic_fallback" &&
+        <p className="forecast-fallback">Cautious rule-based estimate - not calibrated.</p>}
+      <ul className="reliability-reasons">
+        {forecast.reasons.map((reason) => <li key={reason.code}>
+          <span aria-hidden="true">{reason.direction === "helps" ? "+" : "-"}</span>{reason.label}
+        </li>)}
+      </ul>
+    </section>
+  );
+}
+
 function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onCompare: () => void; onUse: () => void }) {
   const { scenario, recommendation } = plan;
   const disrupted = recommendation.kind === "change";
-  const recommended = plan.alternatives.find(({ journey }) => journey.id === recommendation.journeyId)?.journey ?? scenario.usualJourney;
+  const recommendedOption = plan.alternatives.find(({ journey }) => journey.id === recommendation.journeyId) ?? plan.alternatives[0];
+  const recommended = recommendedOption?.journey ?? scenario.usualJourney;
 
   return (
     <main id="main-content" className="screen today-screen">
@@ -195,6 +226,7 @@ function TodayScreen({ plan, onCompare, onUse }: { plan: JourneyPlanView; onComp
         <h2>{recommendation.action}</h2>
         <p>{recommendation.reason}</p>
         <Arrival journey={recommended} deadline={scenario.routine.arrivalDeadline} />
+        {recommendedOption && <ReliabilityForecast option={recommendedOption} />}
         <button className="primary-button" onClick={onUse}>
           <Navigation size={18} />Use this route<ArrowRight size={18} />
         </button>
@@ -291,6 +323,7 @@ function RouteOption({ option, affected, accessibleMode, onUse }: { option: Alte
       </div>
       <h2>{journey.name}</h2>
       <p>{option.explanation}</p>
+      <ReliabilityForecast option={option} />
       {journey.demandForecast && (
         <details className="demand-details">
           <summary>Projected crowding: {crowdingCopy[journey.demandForecast.crowding]} · demo</summary>
@@ -647,6 +680,7 @@ export function CommuteApp({ initialPlan }: { initialPlan: JourneyPlanView }) {
       {plan.demand && <DemandPanel demand={plan.demand} participating={participating}
         busy={demandBusy || isScenarioLoading} online={online} message={demandMessage}
         onRefresh={refreshDemand} onParticipation={updateParticipation} />}
+      {screen === "today" && <ReliabilityPanel plan={plan} onRefresh={async () => { await changeMode(scenario.id); }} />}
       {screen === "today" && <RoutinePanel onPlan={(nextPlan) => {
         setPlan(nextPlan);
         setCached(false);

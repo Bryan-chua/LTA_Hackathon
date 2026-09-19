@@ -10,8 +10,9 @@ Browser/PWA
         |
         | validated routine, explicit consent
         v
-Next.js route handlers on Vercel
-  | OneMap routing/geocoding
+Next.js route handlers on Google Cloud Run
+  | Google Maps Routes transit routing
+  | OneMap Singapore geocoding
   | LTA DataMall alerts/crowding
   | data.gov.sg weather
   | deterministic affected-leg matching + scoring
@@ -21,7 +22,7 @@ Supabase Postgres
   pseudonymous installation + minimized evaluation profile + decisions
         ^
         |
-Supabase Cron -> authenticated POST /api/cron/morning-checks
+Google Cloud Scheduler (OIDC) -> authenticated POST /api/cron/morning-checks
         |
         v
 Web Push service -> installed browser notification
@@ -38,7 +39,7 @@ Web Push service -> installed browser notification
 ## Notification journey
 
 1. Explicit opt-in creates a browser subscription and copies only coordinates, schedule, timezone, deadline, threshold, enabled state, and a version hash to PostgreSQL.
-2. Supabase Cron invokes the authenticated morning-check endpoint every five minutes.
+2. Google Cloud Scheduler invokes the morning-check endpoint every five minutes with a Google-signed OIDC token.
 3. The scheduler transactionally leases due profiles, plans live alternatives, applies the interruption policy, fingerprints the decision, and stores the result.
 4. Only actionable or recovery decisions produce Web Push. HTTP 404/410 subscriptions are deleted.
 
@@ -52,4 +53,10 @@ Web Push service -> installed browser notification
 
 ## AI/ML claim boundary
 
-There is no trained ML model or LLM in the recommendation path. Matching, uncertainty ranges, interruption policy, and route ranking are deterministic and inspectable. The optional demand replay is synthetic scenario arithmetic, not measured passenger prediction.
+There is no calibrated real-world ML model or LLM in the live recommendation path. Replay routes use an explicitly labelled synthetic gradient-boosted decision-stump ensemble to exercise the forecast contract; live routes fall back to deterministic, inspectable uncertainty and scoring. The optional demand replay remains synthetic scenario arithmetic, not measured passenger prediction.
+
+## Planned reliability-forecast extension
+
+The forecast layer is specified in [PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md](PERSONALISED_JOURNEY_RELIABILITY_FORECAST.md). It adds a guarded forecast after normalization and before final scoring. Replay output supplies a synthetic on-time probability and P50/P90; live, stale, unsupported, low-confidence or out-of-distribution requests continue through deterministic `deadlineRisk`.
+
+Opted-in point-in-time observations and confirmed outcomes are stored for 90 days behind server-only PostgreSQL access. Calibrated model training remains deferred work and is not a current-deployment claim.

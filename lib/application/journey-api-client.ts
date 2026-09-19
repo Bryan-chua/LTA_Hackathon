@@ -41,3 +41,31 @@ export async function requestParticipation(method: "GET" | "POST" | "DELETE", bo
   if (!response.ok) throw new Error(payload.error?.message ?? "Could not update demand participation.");
   return payload.data.participating === true;
 }
+
+export async function requestReliabilityConsent(method: "GET" | "POST" | "DELETE"): Promise<boolean> {
+  const response = await fetch("/api/reliability/consent", {
+    method,
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+    ...(method === "GET" ? {} : { headers: { "content-type": "application/json" } }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message ?? "Could not update forecast consent.");
+  return payload.data.consented === true;
+}
+
+export async function submitReliabilityFeedback(input: {
+  observationId: string;
+  arrivedBeforeDeadline: boolean;
+  actualArrival?: string;
+  tookRecommended: boolean;
+}): Promise<void> {
+  const response = await fetch("/api/reliability/feedback", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message ?? "Could not save journey feedback.");
+}

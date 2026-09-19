@@ -15,6 +15,8 @@ test.beforeEach(async ({ page }) => {
 
 test("renders the normal replay without horizontal overflow", async ({ page }) => {
   await expect(page.getByText("Replay scenario · Demo data")).toBeVisible();
+  await expect(page.getByText("Synthetic model output", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Personalised Journey Reliability Forecast")).toContainText("likely before deadline");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
 });

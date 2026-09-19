@@ -86,7 +86,7 @@ export interface Journey {
   departureAt: string;
   arrival: ArrivalRange;
   legs: JourneyLeg[];
-  source: "onemap" | "graphhopper" | "valhalla" | "fixture";
+  source: "google" | "onemap" | "graphhopper" | "valhalla" | "fixture";
   generatedAt: string;
   provider?: ProviderMetadata;
 }
@@ -145,6 +145,31 @@ export interface ScoreBreakdown {
   components: ScoreComponentDetail[];
 }
 
+export interface ReliabilityReason {
+  code: string;
+  label: string;
+  direction: "helps" | "hurts";
+  contribution?: number;
+  source: string;
+}
+
+export interface JourneyReliabilityForecast {
+  method: "model" | "synthetic_model" | "deterministic_fallback";
+  modelVersion?: string;
+  synthetic: boolean;
+  probabilityBeforeDeadline?: number;
+  p50Arrival: string;
+  p90Arrival?: string;
+  likelyArrival: { from: string; to: string };
+  reasons: ReliabilityReason[];
+  confidence: "high" | "medium" | "low";
+  freshness: "live" | "forecast" | "cached" | "stale" | "replay";
+  dataCompleteness: number;
+  fallbackReason?: "model_unavailable" | "stale_critical_data"
+    | "insufficient_similar_journeys" | "unsupported_route" | "schema_mismatch";
+  observationId?: string;
+}
+
 export interface Alternative {
   id: string;
   journey: Journey;
@@ -155,6 +180,7 @@ export interface Alternative {
   transfers: number;
   crowding: CrowdingLevel;
   scoreBreakdown: ScoreBreakdown;
+  reliability: JourneyReliabilityForecast;
 }
 
 export interface AffectedSegment {

@@ -5,6 +5,7 @@ import { journeyOrchestrator } from "@/lib/application/journey-orchestrator";
 import { planLiveJourney } from "@/lib/live/live-planner";
 import { decideMorningCheck } from "@/lib/morning-check";
 import { routineSchema } from "@/lib/routine-schema";
+import { forecastCookie, recordForecastObservations } from "@/lib/server/reliability-store";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
     const plan = parsed.data.dataMode === "live"
       ? await planLiveJourney(parsed.data.routine, new Date(), parsed.data.travelMode)
       : await journeyOrchestrator.plan({ scenarioId: parsed.data.scenarioId, routine: parsed.data.routine, travelMode: parsed.data.travelMode });
+    const publicId = forecastCookie(request);
+    if (publicId) await recordForecastObservations(publicId, plan).catch(() => undefined);
     const decision = decideMorningCheck("manual", "manual", parsed.data.routine, plan);
     return Response.json({ data: { decision, plan } }, { headers: noStore });
   } catch (error) {
